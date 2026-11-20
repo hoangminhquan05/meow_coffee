@@ -16,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String? _role;
   String? _avtUrl;
+  String? _name;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -46,6 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           _role = data['role'] as String?;
           _avtUrl = data['avtUrl'] as String?;
+          _name = data['name'] as String?;
           _isLoading = false;
         });
       } else {
@@ -189,9 +191,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Meow Coffee',
-                  style: TextStyle(
+                Text(
+                  (_name != null && _name!.trim().isNotEmpty)
+                      ? _name!.trim()
+                      : (FirebaseAuth.instance.currentUser?.displayName
+                                  ?.trim()
+                                  .isNotEmpty ==
+                              true
+                          ? FirebaseAuth.instance.currentUser!.displayName!
+                          : (_isLoading ? '' : 'Người dùng')),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
                     color: AppColors.coffeeBrown,
