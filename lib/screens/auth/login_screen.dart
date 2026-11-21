@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? _emailError;
   String? _passwordError;
-  bool _isButtonPressed = false;
+  bool _obscurePassword = true;
   bool _isLoading = false;
 
   static final _emailRegex = RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[\w\-]{2,}$');
@@ -31,15 +32,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     setState(() {
-      _isButtonPressed = true;
       _emailError = null;
       _passwordError = null;
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() => _isButtonPressed = false);
-      }
     });
 
     final email = _emailController.text.trim();
@@ -101,204 +95,104 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  InputDecoration _inputDecoration({
-    required String label,
-    required IconData icon,
-    String? errorText,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: AppColors.mutedPurple.withValues(alpha: 0.8)),
-      prefixIcon: Icon(icon, color: AppColors.mutedPurple),
-      errorText: errorText,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(
-          color: AppColors.mutedPurple.withValues(alpha: 0.5),
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(
-          color: AppColors.mutedPurple,
-          width: 2,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(
-            'assets/images/background_login.jpg',
-            fit: BoxFit.cover,
-          ),
-          Container(color: Colors.white.withValues(alpha: 0.2)),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.mutedPurple, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0x806E3C1B),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedScale(
-                      scale: _isButtonPressed ? 1.05 : 1.0,
-                      duration: const Duration(milliseconds: 100),
-                      child: Image.asset(
-                        'assets/images/coffee_login.png',
-                        width: 120,
-                        height: 120,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Meow Coffee',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 32,
-                        color: AppColors.mutedPurple,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Đăng nhập để khám phá thế giới cà phê',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      cursorColor: AppColors.mutedPurple,
-                      onChanged: (_) {
-                        if (_emailError != null) {
-                          setState(() => _emailError = null);
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        label: 'Email',
-                        icon: Icons.email,
-                        errorText: _emailError,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      cursorColor: AppColors.mutedPurple,
-                      onChanged: (_) {
-                        if (_passwordError != null) {
-                          setState(() => _passwordError = null);
-                        }
-                      },
-                      onSubmitted: (_) => _handleLogin(),
-                      decoration: _inputDecoration(
-                        label: 'Mật khẩu',
-                        icon: Icons.lock,
-                        errorText: _passwordError,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    AnimatedScale(
-                      scale: _isButtonPressed ? 0.95 : 1.0,
-                      duration: const Duration(milliseconds: 100),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                AppColors.softPurple,
-                                AppColors.mutedPurple,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2.5,
-                                    ),
-                                  )
-                                : const Text(
-                                    'ĐĂNG NHẬP',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    InkWell(
-                      onTap: () => Navigator.pushNamed(context, '/forgot_pass'),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Text(
-                          'Quên mật khẩu?',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Đăng Nhập', showBack: false),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const MeowEditorialHero(
+                eyebrow: 'MEOW COFFEE',
+                title: 'Chào mừng trở lại',
+                subtitle: 'Đăng nhập để bắt đầu ca làm việc của bạn.',
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'EMAIL',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                  letterSpacing: 0.5,
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                onChanged: (_) {
+                  if (_emailError != null) setState(() => _emailError = null);
+                },
+                decoration: InputDecoration(
+                  hintText: 'Nhập email của bạn',
+                  errorText: _emailError,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'MẬT KHẨU',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                onChanged: (_) {
+                  if (_passwordError != null) {
+                    setState(() => _passwordError = null);
+                  }
+                },
+                onSubmitted: (_) => _handleLogin(),
+                decoration: InputDecoration(
+                  hintText: '••••••••',
+                  errorText: _passwordError,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: AppColors.muted,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              MeowPrimaryButton(
+                label: 'Đăng nhập',
+                isLoading: _isLoading,
+                onPressed: _handleLogin,
+              ),
+              const SizedBox(height: 14),
+              MeowSecondaryButton(
+                label: 'Quên mật khẩu?',
+                onPressed: () => Navigator.pushNamed(context, '/forgot_pass'),
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                'Meow Coffee • Hệ thống quản lý cửa hàng',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

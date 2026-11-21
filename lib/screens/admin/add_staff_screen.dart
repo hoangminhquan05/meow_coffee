@@ -9,6 +9,8 @@ import 'package:http/http.dart' as http;
 
 import '../../config/env_config.dart';
 import '../../models/user_model.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class AddStaffScreen extends StatefulWidget {
   const AddStaffScreen({super.key});
@@ -175,67 +177,73 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Thêm nhân viên mới')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Tên nhân viên',
-                border: OutlineInputBorder(),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Thêm Nhân Viên'),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const MeowEditorialHero(
+                eyebrow: 'MEOW COFFEE',
+                title: 'Thêm nhân viên mới',
+                subtitle:
+                    'Tạo tài khoản nhân viên và gửi mật khẩu tạm qua email.',
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _roleController,
-              decoration: const InputDecoration(
-                labelText: 'Chức vụ',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 20),
+              MeowFormField(
+                label: 'TÊN NHÂN VIÊN',
+                controller: _nameController,
+                hintText: 'Nhập họ và tên nhân viên',
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Số điện thoại',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 16),
+              MeowFormField(
+                label: 'CHỨC VỤ',
+                controller: _roleController,
+                hintText: 'Nhân Viên',
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 16),
+              MeowFormField(
+                label: 'SỐ ĐIỆN THOẠI',
+                controller: _phoneController,
+                hintText: 'Nhập số điện thoại',
+                keyboardType: TextInputType.phone,
               ),
-            ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              MeowFormField(
+                label: 'EMAIL',
+                controller: _emailController,
+                hintText: 'Nhập email đăng nhập',
+                keyboardType: TextInputType.emailAddress,
+              ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerSoft,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFECDD3)),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: AppColors.danger,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 22),
+              MeowPrimaryButton(
+                label: 'Thêm nhân viên',
+                isLoading: _isLoading,
+                onPressed: _submit,
               ),
             ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Thêm nhân viên'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

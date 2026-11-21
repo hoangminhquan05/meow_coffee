@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user_model.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class StaffManagementScreen extends StatefulWidget {
   const StaffManagementScreen({super.key});
@@ -43,29 +45,17 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 
   Future<void> _deleteStaff(UserModel user) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Xác nhận xóa'),
-        content: Text('Bạn có chắc chắn muốn xóa nhân viên "${user.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Xóa'),
-          ),
-        ],
-      ),
+    final confirmed = await showMeowConfirmDialog(
+      context,
+      title: 'Xóa nhân viên',
+      message:
+          'Bạn có chắc chắn muốn xóa nhân viên “${user.name}” khỏi hệ thống?',
+      confirmLabel: 'Xóa nhân viên',
+      cancelLabel: 'Hủy',
+      isDanger: true,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       await FirebaseFirestore.instance
@@ -95,110 +85,122 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Quản lý nhân viên')),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: () async {
-                await Navigator.pushNamed(context, '/add_staff');
-                _loadStaffList();
-              },
-              child: const Text('Thêm nhân viên'),
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Quản Lý Nhân Viên'),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _staffList.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Chưa có nhân viên nào',
-                    style: TextStyle(color: Colors.grey),
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            )
+          : RefreshIndicator(
+              color: AppColors.brand,
+              onRefresh: _loadStaffList,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                children: [
+                  const MeowEditorialHero(
+                    eyebrow: 'MEOW COFFEE',
+                    title: 'Đội ngũ Meow Coffee',
+                    subtitle: 'Thông tin nhân viên và vai trò trong cửa hàng.',
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadStaffList,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _staffList.length,
-                    separatorBuilder: (_, _) => const Divider(height: 16),
-                    itemBuilder: (context, index) {
-                      final user = _staffList[index];
-                      return Card(
-                        color: colorScheme.surfaceContainerHighest,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              ClipOval(
-                                child: SizedBox(
-                                  width: 64,
-                                  height: 64,
-                                  child: user.avtUrl.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: user.avtUrl,
-                                          fit: BoxFit.cover,
-                                          errorWidget: (_, _, _) => Image.asset(
-                                            'assets/images/user_df.jpg',
-                                            fit: BoxFit.cover,
-                                          ),
-                                        )
-                                      : Image.asset(
+                  const SizedBox(height: 16),
+                  MeowPrimaryButton(
+                    label: 'Thêm nhân viên',
+                    icon: Icons.person_add_alt_1_rounded,
+                    onPressed: () async {
+                      await Navigator.pushNamed(context, '/add_staff');
+                      _loadStaffList();
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  if (_staffList.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 36),
+                      child: Center(
+                        child: Text(
+                          'Chưa có nhân viên nào',
+                          style: TextStyle(color: AppColors.muted),
+                        ),
+                      ),
+                    )
+                  else
+                    for (final user in _staffList) ...[
+                      MeowCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipOval(
+                              child: SizedBox(
+                                width: 52,
+                                height: 52,
+                                child: user.avtUrl.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: user.avtUrl,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, _, _) => Image.asset(
                                           'assets/images/user_df.jpg',
                                           fit: BoxFit.cover,
                                         ),
-                                ),
+                                      )
+                                    : Image.asset(
+                                        'assets/images/user_df.jpg',
+                                        fit: BoxFit.cover,
+                                      ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      user.name,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.name,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    user.email,
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${user.soDienThoai} • ${user.role}',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  GestureDetector(
+                                    onTap: () => _deleteStaff(user),
+                                    child: const Text(
+                                      'Xóa nhân viên',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.danger,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text('Email: ${user.email}'),
-                                    Text('SĐT: ${user.soDienThoai}'),
-                                    Text(
-                                      'Vai trò: ${user.role}',
-                                      style:
-                                          TextStyle(color: colorScheme.primary),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'delete') {
-                                    _deleteStaff(user);
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Xóa'),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                ],
+              ),
+            ),
     );
   }
 }

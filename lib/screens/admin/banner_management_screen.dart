@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../../models/banner_model.dart';
 import '../../providers/banner_provider.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class BannerManagementScreen extends StatefulWidget {
   const BannerManagementScreen({super.key});
@@ -32,159 +34,220 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     );
   }
 
+  Future<void> _confirmDeleteBanner(BannerModel banner) async {
+    final confirmed = await showMeowConfirmDialog(
+      context,
+      title: 'Xóa banner',
+      message: 'Xóa banner “${banner.name}”?',
+      confirmLabel: 'Xóa banner',
+      cancelLabel: 'Hủy',
+      isDanger: true,
+    );
+    if (confirmed && mounted) {
+      await context.read<BannerProvider>().deleteBanner(banner.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BannerProvider>();
-    final colorScheme = Theme.of(context).colorScheme;
     final selected = provider.selectedBanner;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quản lý Banner'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Thêm banner',
-            onPressed: () => _openBannerDialog(),
-          ),
-        ],
+      backgroundColor: AppColors.bg,
+      appBar: MeowHeader(
+        title: 'Quản Lý Banner',
+        trailing: MeowCircleIconButton(
+          icon: Icons.add_rounded,
+          onTap: () => _openBannerDialog(),
+        ),
       ),
       body: Column(
         children: [
           Expanded(
             child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : provider.banners.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Chưa có banner nào',
-                          style: TextStyle(color: Colors.grey),
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.brand),
+                  )
+                : RefreshIndicator(
+                    color: AppColors.brand,
+                    onRefresh: () => provider.loadBanners(),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                      children: [
+                        const MeowEditorialHero(
+                          eyebrow: 'MEOW COFFEE',
+                          title: 'Quản lý banner',
+                          subtitle:
+                              'Chọn banner để chỉnh sửa hoặc thêm hình ảnh quảng bá mới.',
                         ),
-                      )
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(8),
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 240,
-                          childAspectRatio: 0.95,
+                        const SizedBox(height: 16),
+                        MeowPrimaryButton(
+                          label: 'Thêm banner mới',
+                          icon: Icons.add_photo_alternate_outlined,
+                          height: 50,
+                          onPressed: () => _openBannerDialog(),
                         ),
-                        itemCount: provider.banners.length,
-                        itemBuilder: (context, index) {
-                          final banner = provider.banners[index];
-                          final isSelected = selected?.id == banner.id;
-
-                          return Card(
-                            margin: const EdgeInsets.all(8),
-                            elevation: isSelected ? 8 : 4,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                color: isSelected
-                                    ? colorScheme.primary
-                                    : Colors.transparent,
-                                width: 2,
+                        const SizedBox(height: 18),
+                        if (provider.banners.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 36),
+                            child: Center(
+                              child: Text(
+                                'Chưa có banner nào',
+                                style: TextStyle(color: AppColors.muted),
                               ),
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
+                          )
+                        else
+                          for (final banner in provider.banners) ...[
+                            _BannerItemCard(
+                              banner: banner,
+                              isSelected: selected?.id == banner.id,
                               onTap: () => provider.selectBanner(banner),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                    child: CachedNetworkImage(
-                                      imageUrl: banner.bannerUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (_, _) => Container(
-                                        color: Colors.grey.shade200,
-                                      ),
-                                      errorWidget: (_, _, _) => Image.asset(
-                                        'assets/images/banner.jpg',
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      banner.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
-                          );
-                        },
-                      ),
+                            const SizedBox(height: 14),
+                          ],
+                      ],
+                    ),
+                  ),
           ),
-          if (selected != null)
-            SafeArea(
+          Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+            ),
+            child: SafeArea(
               top: false,
-              child: Card(
-                margin: const EdgeInsets.all(12),
-                elevation: 6,
-                color: colorScheme.surfaceContainerHighest,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '🎯 Đang chọn: ${selected.name}',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                child: selected == null
+                    ? const Text(
+                        'Chọn banner để xem các thao tác.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: AppColors.muted),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () =>
-                                  _openBannerDialog(existing: selected),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.primary,
-                                foregroundColor: colorScheme.onPrimary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Chỉnh sửa'),
+                          Text(
+                            'Đang chọn: ${selected.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => provider.deleteBanner(selected.id),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.error,
-                                foregroundColor: colorScheme.onError,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: MeowSecondaryButton(
+                                  label: 'Chỉnh sửa',
+                                  icon: Icons.edit_outlined,
+                                  height: 44,
+                                  onPressed: () =>
+                                      _openBannerDialog(existing: selected),
                                 ),
                               ),
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Xóa'),
-                            ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: MeowPrimaryButton(
+                                  label: 'Xóa banner',
+                                  icon: Icons.delete_outline_rounded,
+                                  height: 44,
+                                  solidColor: AppColors.danger,
+                                  onPressed: () =>
+                                      _confirmDeleteBanner(selected),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BannerItemCard extends StatelessWidget {
+  final BannerModel banner;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _BannerItemCard({
+    required this.banner,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MeowCard(
+      padding: EdgeInsets.zero,
+      borderColor: isSelected ? AppColors.brand : AppColors.border,
+      borderWidth: isSelected ? 2 : 1,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 164,
+            child: CachedNetworkImage(
+              imageUrl: banner.bannerUrl,
+              fit: BoxFit.cover,
+              placeholder: (_, _) => Container(color: AppColors.soft),
+              errorWidget: (_, _, _) => Image.asset(
+                'assets/images/banner.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    banner.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ),
+                if (isSelected)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.soft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      'Đang chọn',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brand,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -277,103 +340,119 @@ class _BannerDialogState extends State<_BannerDialog> {
   @override
   Widget build(BuildContext context) {
     final existing = widget.existing;
-    final dialogWidth = (MediaQuery.of(context).size.width - 80).clamp(240.0, 340.0);
+    final dialogWidth =
+        (MediaQuery.of(context).size.width - 64).clamp(260.0, 350.0);
 
-    return AlertDialog(
-      title: Text(existing == null ? 'Thêm Banner' : 'Chỉnh sửa Banner'),
-      content: SizedBox(
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      child: SizedBox(
         width: dialogWidth,
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _nameController,
-                enabled: !_isSaving,
-                decoration: const InputDecoration(
-                  labelText: 'Tên banner',
-                  border: OutlineInputBorder(),
+              Text(
+                existing == null ? 'Thêm banner' : 'Chỉnh sửa banner',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
                 ),
+              ),
+              const SizedBox(height: 16),
+              MeowFormField(
+                label: 'TÊN BANNER',
+                controller: _nameController,
+                hintText: 'Nhập tên banner',
+                readOnly: _isSaving,
               ),
               const SizedBox(height: 16),
               if (_isSaving)
                 const Column(
                   children: [
-                    LinearProgressIndicator(),
+                    LinearProgressIndicator(color: AppColors.brand),
                     SizedBox(height: 8),
-                    Text('Đang tải lên...'),
+                    Text(
+                      'Đang tải lên...',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+                    ),
                   ],
                 )
               else
-                ElevatedButton.icon(
+                MeowSecondaryButton(
+                  label: _pickedImage != null ? 'Đổi ảnh khác' : 'Chọn ảnh mới',
+                  icon: Icons.collections_outlined,
+                  height: 46,
                   onPressed: _pickImage,
-                  icon: const Icon(Icons.collections),
-                  label: Text(
-                    _pickedImage != null ? 'Đổi ảnh khác' : 'Chọn ảnh mới',
-                  ),
                 ),
               if (_errorText != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   _errorText!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
+                  style: const TextStyle(
+                    color: AppColors.danger,
                     fontSize: 12,
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
-              if (_pickedImage != null)
+              if (_pickedImage != null) ...[
+                const SizedBox(height: 14),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(14),
                   child: SizedBox(
-                    width: dialogWidth,
-                    height: 160,
+                    width: dialogWidth - 44,
+                    height: 150,
                     child: Image.file(
                       _pickedImage!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => Container(
-                        color: Colors.grey.shade200,
+                        color: AppColors.soft,
                         alignment: Alignment.center,
                         child: const Text('Không thể hiển thị ảnh đã chọn'),
                       ),
                     ),
                   ),
-                )
-              else if (existing != null && existing.bannerUrl.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Ảnh hiện tại:'),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        width: dialogWidth,
-                        height: 160,
-                        child: CachedNetworkImage(
-                          imageUrl: existing.bannerUrl,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
+              ] else if (existing != null && existing.bannerUrl.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Ảnh hiện tại:',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                    width: dialogWidth - 44,
+                    height: 150,
+                    child: CachedNetworkImage(
+                      imageUrl: existing.bannerUrl,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              MeowPrimaryButton(
+                label: 'Lưu thay đổi',
+                height: 48,
+                isLoading: _isSaving,
+                onPressed: _save,
+              ),
+              const SizedBox(height: 10),
+              MeowSecondaryButton(
+                label: 'Hủy',
+                height: 44,
+                onPressed: _isSaving ? null : () => Navigator.pop(context),
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Hủy'),
-        ),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _save,
-          child: const Text('Lưu thay đổi'),
-        ),
-      ],
     );
   }
 }

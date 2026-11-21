@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../config/env_config.dart';
 import '../../services/cloudinary_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class EditProductScreen extends StatefulWidget {
   final String? productId;
@@ -147,139 +149,155 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Chỉnh sửa sản phẩm')),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Chỉnh Sửa Sản Phẩm'),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ảnh sản phẩm *',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    onTap: _isUploading ? null : _pickImage,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: (_pickedImage == null &&
-                                  _currentImageUrl.isEmpty &&
-                                  !_isUploading)
-                              ? colorScheme.error
-                              : colorScheme.outline,
-                        ),
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            )
+          : SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'ẢNH SẢN PHẨM',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.muted,
+                        letterSpacing: 0.5,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      alignment: Alignment.center,
-                      child: _isUploading
-                          ? const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 8),
-                                Text('Đang tải lên...'),
-                              ],
-                            )
-                          : _pickedImage != null
-                              ? Image.file(
-                                  _pickedImage!,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  fit: BoxFit.cover,
-                                )
-                              : _currentImageUrl.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: _currentImageUrl,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.add_a_photo,
-                                          size: 36,
-                                          color: colorScheme.primary,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        const Text('Nhấn để chọn ảnh'),
-                                      ],
-                                    ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Thông tin sản phẩm',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tên sản phẩm *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _priceController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Giá *',
-                      suffixText: 'VND',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _categoryController,
-                    decoration: const InputDecoration(
-                      labelText: 'Danh mục *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _descriptionController,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Mô tả sản phẩm *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isUploading ? null : _updateProduct,
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                    const SizedBox(height: 8),
+                    MeowCard(
+                      color: AppColors.soft,
+                      borderRadius: 24,
+                      padding: EdgeInsets.zero,
+                      onTap: _isUploading ? null : _pickImage,
+                      child: SizedBox(
+                        height: 184,
+                        width: double.infinity,
+                        child: _isUploading
+                            ? const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(
+                                    color: AppColors.brand,
+                                  ),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Đang tải lên...',
+                                    style: TextStyle(color: AppColors.brand),
+                                  ),
+                                ],
+                              )
+                            : _pickedImage != null
+                                ? Image.file(
+                                    _pickedImage!,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
+                                  )
+                                : _currentImageUrl.isNotEmpty
+                                    ? Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          CachedNetworkImage(
+                                            imageUrl: _currentImageUrl,
+                                            fit: BoxFit.cover,
+                                          ),
+                                          Positioned(
+                                            right: 12,
+                                            bottom: 12,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black
+                                                    .withValues(alpha: 0.6),
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: const Text(
+                                                'Đổi ảnh',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            size: 36,
+                                            color: AppColors.brand,
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            'Nhấn để chọn ảnh',
+                                            style: TextStyle(
+                                              color: AppColors.brand,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                       ),
-                      child: _isUploading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('CẬP NHẬT SẢN PHẨM'),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 18),
+                    MeowFormField(
+                      label: 'TÊN SẢN PHẨM *',
+                      controller: _nameController,
+                      hintText: 'Nhập tên sản phẩm',
+                    ),
+                    const SizedBox(height: 16),
+                    MeowFormField(
+                      label: 'GIÁ *',
+                      controller: _priceController,
+                      hintText: 'Nhập giá bán (VNĐ)',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                    const SizedBox(height: 16),
+                    MeowFormField(
+                      label: 'DANH MỤC *',
+                      controller: _categoryController,
+                      hintText: 'Trà Hoa Quả, Trà Sữa, Sữa...',
+                    ),
+                    const SizedBox(height: 16),
+                    MeowFormField(
+                      label: 'MÔ TẢ SẢN PHẨM *',
+                      controller: _descriptionController,
+                      hintText: 'Nhập mô tả sản phẩm',
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 22),
+                    MeowPrimaryButton(
+                      label: 'Cập nhật sản phẩm',
+                      isLoading: _isUploading,
+                      onPressed: _updateProduct,
+                    ),
+                    const SizedBox(height: 12),
+                    MeowSecondaryButton(
+                      label: 'Hủy',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
               ),
             ),
     );

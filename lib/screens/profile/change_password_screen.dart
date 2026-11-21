@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../../config/env_config.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 enum _ChangePasswordStep { email, otp, password }
 
@@ -17,18 +18,12 @@ class ChangePasswordScreen extends StatefulWidget {
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen>
-    with SingleTickerProviderStateMixin {
-  static const Color _darkBrown = Color(0xFF4E342E);
-  static const Color _borderBrown = Color(0xFFBCAAA4);
-
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _emailController = TextEditingController();
   final _otpController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
-  late final AnimationController _rotationController;
 
   _ChangePasswordStep _step = _ChangePasswordStep.email;
   String _generatedOtp = '';
@@ -40,17 +35,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   static final _emailRegex = RegExp(r'^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$');
 
   @override
-  void initState() {
-    super.initState();
-    _rotationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat();
-  }
-
-  @override
   void dispose() {
-    _rotationController.dispose();
     _emailController.dispose();
     _otpController.dispose();
     _currentPasswordController.dispose();
@@ -205,230 +190,124 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Thành công!',
-          style: TextStyle(fontWeight: FontWeight.bold, color: _darkBrown),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Mật khẩu đã được thay đổi thành công!'),
-            const SizedBox(height: 16),
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF8BC34A).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF8BC34A), width: 2),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: AppColors.successSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: AppColors.success,
+                  size: 30,
+                ),
               ),
-              alignment: Alignment.center,
-              child: const Text(
-                '✓',
+              const SizedBox(height: 16),
+              const Text(
+                'Đổi mật khẩu thành công',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 40,
-                  color: Color(0xFF8BC34A),
-                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
                 ),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/home',
-                  (route) => false,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.coffeeBrown,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Mật khẩu của bạn đã được cập nhật.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, color: AppColors.muted),
               ),
-              child: const Text('OK', style: TextStyle(fontSize: 16)),
-            ),
+              const SizedBox(height: 20),
+              MeowPrimaryButton(
+                label: 'Về trang chủ',
+                height: 48,
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/home',
+                    (route) => false,
+                  );
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  InputDecoration _brownFieldDecoration({
-    String? label,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _borderBrown),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.coffeeBrown, width: 2),
-      ),
-      suffixIcon: suffixIcon,
-    );
-  }
+  int get _stepIndex => switch (_step) {
+        _ChangePasswordStep.email => 1,
+        _ChangePasswordStep.otp => 2,
+        _ChangePasswordStep.password => 3,
+      };
+
+  String get _headerTitle => switch (_step) {
+        _ChangePasswordStep.email => 'Xác Thực Email',
+        _ChangePasswordStep.otp => 'Xác Thực OTP',
+        _ChangePasswordStep.password => 'Đổi Mật Khẩu',
+      };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: Stack(
-        children: [
-          Positioned(
-            top: -30,
-            right: -30,
-            child: RotationTransition(
-              turns: _rotationController,
-              child: _DecorativeCircle(size: 120, emoji: '☕', fontSize: 40),
-            ),
+      backgroundColor: AppColors.bg,
+      appBar: MeowHeader(title: _headerTitle),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _VerificationProgressBar(currentStep: _stepIndex),
+              const SizedBox(height: 18),
+              if (_step == _ChangePasswordStep.email)
+                _buildEmailStep()
+              else if (_step == _ChangePasswordStep.otp)
+                _buildOtpStep()
+              else
+                _buildPasswordStep(),
+            ],
           ),
-          Positioned(
-            bottom: -20,
-            left: -20,
-            child: RotationTransition(
-              turns: _rotationController,
-              child: _DecorativeCircle(size: 100, emoji: '🔒', fontSize: 30),
-            ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  title: const Text(
-                    'Đổi Mật Khẩu',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: _darkBrown,
-                    ),
-                  ),
-                  leading: IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: AppColors.coffeeBrown),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: AppColors.coffeeBrown.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color:
-                                  AppColors.coffeeBrown.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text('🔑', style: TextStyle(fontSize: 40)),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_step == _ChangePasswordStep.email)
-                          _buildEmailStep()
-                        else if (_step == _ChangePasswordStep.otp)
-                          _buildOtpStep()
-                        else
-                          _buildPasswordStep(),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(
-                            5,
-                            (_) => Text(
-                              '•',
-                              style: TextStyle(
-                                fontSize: 20,
-                                color: AppColors.coffeeBrown
-                                    .withValues(alpha: 0.2),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildEmailStep() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Xác thực Email',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: _darkBrown,
-          ),
+        const MeowEditorialHero(
+          eyebrow: 'BƯỚC 1 / 3',
+          title: 'Xác thực Email',
+          subtitle: 'Nhập email đã đăng ký tài khoản để nhận mã OTP bảo mật.',
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Vui lòng nhập email đã đăng ký tài khoản',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.coffeeBrown.withValues(alpha: 0.8),
-          ),
-        ),
-        const SizedBox(height: 32),
-        TextField(
+        const SizedBox(height: 20),
+        MeowFormField(
+          label: 'EMAIL',
           controller: _emailController,
+          hintText: 'Nhập email đã đăng ký',
           keyboardType: TextInputType.emailAddress,
-          decoration: _brownFieldDecoration(label: 'Email'),
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _sendOtp,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.coffeeBrown,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                : const Text(
-                    'Gửi OTP',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-          ),
+        const SizedBox(height: 20),
+        MeowPrimaryButton(
+          label: 'Gửi mã OTP',
+          isLoading: _isLoading,
+          onPressed: _sendOtp,
         ),
       ],
     );
@@ -436,56 +315,32 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
   Widget _buildOtpStep() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Xác thực OTP',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: _darkBrown,
-          ),
+        const MeowEditorialHero(
+          eyebrow: 'BƯỚC 2 / 3',
+          title: 'Xác thực OTP',
+          subtitle: 'Nhập mã xác thực 6 chữ số đã được gửi đến email của bạn.',
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Vui lòng nhập mã OTP đã gửi đến email của bạn',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.coffeeBrown.withValues(alpha: 0.8),
-          ),
-        ),
-        const SizedBox(height: 32),
-        TextField(
+        const SizedBox(height: 20),
+        MeowFormField(
+          label: 'MÃ OTP',
           controller: _otpController,
+          hintText: 'Nhập 6 chữ số OTP',
           keyboardType: TextInputType.number,
-          decoration: _brownFieldDecoration(label: 'Mã OTP'),
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _verifyOtp,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.coffeeBrown,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Xác nhận OTP',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
+        const SizedBox(height: 20),
+        MeowPrimaryButton(
+          label: 'Xác nhận OTP',
+          onPressed: _verifyOtp,
         ),
-        const SizedBox(height: 8),
-        TextButton(
+        const SizedBox(height: 12),
+        MeowSecondaryButton(
+          label: 'Quay lại nhập email',
           onPressed: () {
             _otpController.clear();
             setState(() => _step = _ChangePasswordStep.email);
           },
-          child: const Text('Quay lại nhập email'),
         ),
       ],
     );
@@ -493,136 +348,99 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
   Widget _buildPasswordStep() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Center(
-          child: Text(
-            'Đổi Mật Khẩu',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: _darkBrown,
-            ),
-          ),
+        const MeowEditorialHero(
+          eyebrow: 'BƯỚC 3 / 3',
+          title: 'Đổi mật khẩu mới',
+          subtitle: 'Nhập mật khẩu hiện tại và thiết lập mật khẩu mới.',
         ),
-        const SizedBox(height: 8),
-        Center(
-          child: Text(
-            'Vui lòng nhập mật khẩu mới',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.coffeeBrown.withValues(alpha: 0.8),
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
-        TextField(
+        const SizedBox(height: 20),
+        MeowFormField(
+          label: 'MẬT KHẨU HIỆN TẠI',
           controller: _currentPasswordController,
+          hintText: '••••••••',
           obscureText: !_showCurrentPassword,
-          decoration: _brownFieldDecoration(
-            label: 'Mật khẩu hiện tại',
-            suffixIcon: IconButton(
-              icon: Icon(
-                _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
-                color: AppColors.coffeeBrown.withValues(alpha: 0.6),
-              ),
-              onPressed: () => setState(
-                () => _showCurrentPassword = !_showCurrentPassword,
-              ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _showCurrentPassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppColors.muted,
+              size: 20,
             ),
+            onPressed: () =>
+                setState(() => _showCurrentPassword = !_showCurrentPassword),
           ),
         ),
         const SizedBox(height: 16),
-        TextField(
+        MeowFormField(
+          label: 'MẬT KHẨU MỚI',
           controller: _newPasswordController,
+          hintText: '••••••••',
           obscureText: !_showNewPassword,
-          decoration: _brownFieldDecoration(
-            label: 'Mật khẩu mới',
-            suffixIcon: IconButton(
-              icon: Icon(
-                _showNewPassword ? Icons.visibility : Icons.visibility_off,
-                color: AppColors.coffeeBrown.withValues(alpha: 0.6),
-              ),
-              onPressed: () =>
-                  setState(() => _showNewPassword = !_showNewPassword),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _showNewPassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppColors.muted,
+              size: 20,
             ),
+            onPressed: () =>
+                setState(() => _showNewPassword = !_showNewPassword),
           ),
         ),
         const SizedBox(height: 16),
-        TextField(
+        MeowFormField(
+          label: 'NHẬP LẠI MẬT KHẨU MỚI',
           controller: _confirmPasswordController,
+          hintText: '••••••••',
           obscureText: !_showConfirmPassword,
-          decoration: _brownFieldDecoration(
-            label: 'Nhập lại mật khẩu mới',
-            suffixIcon: IconButton(
-              icon: Icon(
-                _showConfirmPassword ? Icons.visibility : Icons.visibility_off,
-                color: AppColors.coffeeBrown.withValues(alpha: 0.6),
-              ),
-              onPressed: () => setState(
-                () => _showConfirmPassword = !_showConfirmPassword,
-              ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _showConfirmPassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppColors.muted,
+              size: 20,
             ),
+            onPressed: () =>
+                setState(() => _showConfirmPassword = !_showConfirmPassword),
           ),
         ),
-        const SizedBox(height: 28),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _changePassword,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.coffeeBrown,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                : const Text(
-                    'Đổi Mật Khẩu',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-          ),
+        const SizedBox(height: 22),
+        MeowPrimaryButton(
+          label: 'Cập nhật mật khẩu',
+          isLoading: _isLoading,
+          onPressed: _changePassword,
         ),
       ],
     );
   }
 }
 
-class _DecorativeCircle extends StatelessWidget {
-  final double size;
-  final String emoji;
-  final double fontSize;
+class _VerificationProgressBar extends StatelessWidget {
+  final int currentStep;
 
-  const _DecorativeCircle({
-    required this.size,
-    required this.emoji,
-    required this.fontSize,
-  });
+  const _VerificationProgressBar({required this.currentStep});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: AppColors.coffeeBrown.withValues(alpha: 0.05),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppColors.coffeeBrown.withValues(alpha: 0.1),
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Opacity(
-        opacity: 0.25,
-        child: Text(emoji, style: TextStyle(fontSize: fontSize)),
-      ),
+    return Row(
+      children: List.generate(3, (index) {
+        final active = index < currentStep;
+        return Expanded(
+          child: Container(
+            height: 6,
+            margin: EdgeInsets.only(right: index < 2 ? 8 : 0),
+            decoration: BoxDecoration(
+              color: active ? AppColors.brand : AppColors.softBorder,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        );
+      }),
     );
   }
 }

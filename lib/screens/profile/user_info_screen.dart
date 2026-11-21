@@ -1,9 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String? userId;
@@ -39,12 +41,50 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
 
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('uSer').doc(uid).get();
-      if (!mounted) return;
+      final usersCol = FirebaseFirestore.instance.collection('uSer');
+      final currentUser = FirebaseAuth.instance.currentUser;
+      UserModel? loaded;
+
+      final doc = await usersCol.doc(uid).get();
       if (doc.exists && doc.data() != null) {
+        loaded = UserModel.fromMap(doc.data()!, docId: doc.id);
+      } else {
+        final byUid =
+            await usersCol.where('uid', isEqualTo: uid).limit(1).get();
+        if (byUid.docs.isNotEmpty) {
+          final d = byUid.docs.first;
+          loaded = UserModel.fromMap(d.data(), docId: d.id);
+        } else if (currentUser?.email != null &&
+            currentUser!.email!.isNotEmpty) {
+          final byEmail = await usersCol
+              .where('email', isEqualTo: currentUser.email)
+              .limit(1)
+              .get();
+          if (byEmail.docs.isNotEmpty) {
+            final d = byEmail.docs.first;
+            loaded = UserModel.fromMap(d.data(), docId: d.id);
+          }
+        }
+      }
+
+      if (!mounted) return;
+      if (loaded != null) {
         setState(() {
-          _user = UserModel.fromMap(doc.data()!, docId: doc.id);
+          _user = loaded;
+          _errorMessage = null;
+          _isLoading = false;
+        });
+      } else if (currentUser != null && currentUser.uid == uid) {
+        setState(() {
+          _user = UserModel(
+            uid: uid,
+            avtUrl: currentUser.photoURL ?? '',
+            email: currentUser.email ?? '',
+            name: currentUser.displayName ?? '',
+            role: 'Nhân Viên',
+            soDienThoai: '',
+          );
+          _errorMessage = null;
           _isLoading = false;
         });
       } else {
@@ -73,151 +113,268 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
   }
 
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return 'MC';
+    if (parts.length == 1) {
+      return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Thông Tin Cá Nhân',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: AppColors.deepPurple,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Thông Tin Cá Nhân'),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            )
           : _errorMessage != null
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
+                      style: const TextStyle(color: AppColors.danger),
                     ),
                   ),
                 )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      ClipOval(
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          color: Colors.grey.shade300,
-                          child: (_user!.avtUrl.isNotEmpty)
-                              ? CachedNetworkImage(
-                                  imageUrl: _user!.avtUrl,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, _, _) => Image.asset(
-                                    'assets/images/coffee_login.png',
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : Image.asset(
-                                  'assets/images/coffee_login.png',
-                                  fit: BoxFit.cover,
+              : Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            MeowCard(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 24,
+                              ),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 96,
+                                      height: 96,
+                                      padding: const EdgeInsets.all(3.5),
+                                      decoration: const BoxDecoration(
+                                        gradient: AppColors.brandGradient,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: AppColors.soft,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2.5,
+                                          ),
+                                        ),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: (_user!.avtUrl.isNotEmpty)
+                                            ? CachedNetworkImage(
+                                                imageUrl: _user!.avtUrl,
+                                                fit: BoxFit.cover,
+                                                errorWidget: (_, _, _) => Center(
+                                                  child: Text(
+                                                    _initials(_user!.name),
+                                                    style: const TextStyle(
+                                                      fontSize: 26,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: AppColors.brand,
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            : Center(
+                                                child: Text(
+                                                  _initials(_user!.name),
+                                                  style: const TextStyle(
+                                                    fontSize: 26,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.brand,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      _user!.name.isNotEmpty
+                                          ? _user!.name
+                                          : 'Không có tên',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.inkSlate,
+                                        letterSpacing: -0.4,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.soft,
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        _formatRole(_user!.role),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.brand,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        _user!.name.isNotEmpty ? _user!.name : 'Không có tên',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _InfoCard(
-                        title: 'Email',
-                        value: _user!.email.isNotEmpty
-                            ? _user!.email
-                            : 'Không có email',
-                      ),
-                      const SizedBox(height: 8),
-                      _InfoCard(
-                        title: 'Số điện thoại',
-                        value: _user!.soDienThoai.isNotEmpty
-                            ? _user!.soDienThoai
-                            : 'Không có số điện thoại',
-                      ),
-                      const SizedBox(height: 8),
-                      _InfoCard(
-                        title: 'Chức vụ',
-                        value: _formatRole(_user!.role),
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamed(
-                              context,
-                              '/editUserInfo',
-                              arguments: widget.userId,
-                            ).then((_) => _loadUser());
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.deepPurple,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text(
-                            'Chỉnh sửa thông tin',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                              ),
                             ),
+                            const SizedBox(height: 20),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'THÔNG TIN LIÊN HỆ & TÀI KHOẢN',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.mutedLight,
+                                      letterSpacing: 0.6,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Chi tiết',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brand,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _InfoFieldCard(
+                              icon: Icons.mail_outline_rounded,
+                              label: 'EMAIL',
+                              value: _user!.email.isNotEmpty
+                                  ? _user!.email
+                                  : 'Không có email',
+                            ),
+                            const SizedBox(height: 12),
+                            _InfoFieldCard(
+                              icon: Icons.phone_outlined,
+                              label: 'SỐ ĐIỆN THOẠI',
+                              value: _user!.soDienThoai.isNotEmpty
+                                  ? _user!.soDienThoai
+                                  : 'Không có số điện thoại',
+                            ),
+                            const SizedBox(height: 12),
+                            _InfoFieldCard(
+                              icon: Icons.badge_outlined,
+                              label: 'CHỨC VỤ TRONG HỆ THỐNG',
+                              value: _formatRole(_user!.role),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border(
+                          top: BorderSide(color: AppColors.borderSubtle),
+                        ),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                          child: MeowPrimaryButton(
+                            label: 'Chỉnh sửa thông tin',
+                            icon: Icons.edit_outlined,
+                            onPressed: () {
+                              Navigator.pushNamed(
+                                context,
+                                '/editUserInfo',
+                                arguments: widget.userId,
+                              ).then((_) => _loadUser());
+                            },
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final String title;
+class _InfoFieldCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final String value;
 
-  const _InfoCard({
-    required this.title,
+  const _InfoFieldCard({
+    required this.icon,
+    required this.label,
     required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: Card(
-        color: const Color(0xFFF5F5F5),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+    return MeowCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: AppColors.brand),
           ),
-        ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.mutedLight,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.inkSlate,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

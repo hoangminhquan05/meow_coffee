@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String phone;
@@ -19,6 +20,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
@@ -71,7 +74,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đổi mật khẩu thất bại: ${e.message ?? e.code}')),
+        SnackBar(
+          content: Text('Đổi mật khẩu thất bại: ${e.message ?? e.code}'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -81,75 +86,72 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFEFEF),
-      body: Center(
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Đặt Lại Mật Khẩu'),
+      body: SafeArea(
+        top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Card(
-            elevation: 8,
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Đặt lại mật khẩu',
-                    style: TextStyle(
-                      fontSize: 24,
-                      color: AppColors.deepPurple,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Mật khẩu mới',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _confirmPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Xác nhận mật khẩu',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updatePassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.deepPurple,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Đổi mật khẩu',
-                              style: TextStyle(fontSize: 18),
-                            ),
-                    ),
-                  ),
-                ],
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const MeowEditorialHero(
+                eyebrow: 'MEOW COFFEE',
+                title: 'Tạo mật khẩu mới',
+                subtitle:
+                    'Đặt mật khẩu mới để tiếp tục sử dụng tài khoản Meow Coffee.',
               ),
-            ),
+              const SizedBox(height: 20),
+              MeowFormField(
+                label: 'MẬT KHẨU MỚI',
+                controller: _newPasswordController,
+                hintText: '••••••••',
+                obscureText: _obscureNew,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureNew
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: AppColors.muted,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+              const SizedBox(height: 18),
+              MeowFormField(
+                label: 'XÁC NHẬN MẬT KHẨU',
+                controller: _confirmPasswordController,
+                hintText: '••••••••',
+                obscureText: _obscureConfirm,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirm
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: AppColors.muted,
+                    size: 20,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+              const SizedBox(height: 22),
+              MeowPrimaryButton(
+                label: 'Đặt lại mật khẩu',
+                isLoading: _isLoading,
+                onPressed: _updatePassword,
+              ),
+              const SizedBox(height: 14),
+              MeowSecondaryButton(
+                label: 'Quay lại đăng nhập',
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/login',
+                  (route) => false,
+                ),
+              ),
+            ],
           ),
         ),
       ),

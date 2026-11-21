@@ -3,7 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/meow_ui.dart';
 
 class _SaleDetail {
   final String sellerId;
@@ -193,6 +195,127 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     });
   }
 
+  Future<void> _openFilterHubDialog() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Bộ lọc đơn hàng',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Chọn tiêu chí để xem đúng dữ liệu bạn cần.',
+                style: TextStyle(fontSize: 13, color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+              if (_userRole == 'ADMIN') ...[
+                _FilterOptionTile(
+                  icon: Icons.people_outline_rounded,
+                  label: 'Lọc theo nhân viên',
+                  active: _selectedStaffIds.isNotEmpty,
+                  onTap: () => Navigator.pop(dialogContext, 'staff'),
+                ),
+                const SizedBox(height: 8),
+              ],
+              _FilterOptionTile(
+                icon: Icons.calendar_today_outlined,
+                label: 'Lọc theo ngày cụ thể',
+                active: _selectedDate != null,
+                onTap: () => Navigator.pop(dialogContext, 'date'),
+              ),
+              const SizedBox(height: 8),
+              _FilterOptionTile(
+                icon: Icons.date_range_outlined,
+                label: 'Lọc theo khoảng ngày',
+                active: _selectedDateRange != null,
+                onTap: () => Navigator.pop(dialogContext, 'range'),
+              ),
+              const SizedBox(height: 8),
+              _FilterOptionTile(
+                icon: Icons.payments_outlined,
+                label: 'Lọc theo phương thức thanh toán',
+                active: _selectedPaymentMethod != null,
+                onTap: () => Navigator.pop(dialogContext, 'payment'),
+              ),
+              const SizedBox(height: 8),
+              _FilterOptionTile(
+                icon: Icons.local_cafe_outlined,
+                label: 'Lọc theo sản phẩm',
+                active: _selectedProduct != null,
+                onTap: () => Navigator.pop(dialogContext, 'product'),
+              ),
+              const SizedBox(height: 16),
+              MeowSecondaryButton(
+                label: 'Xóa tất cả bộ lọc',
+                textColor: AppColors.danger,
+                backgroundColor: AppColors.dangerSoft,
+                borderColor: const Color(0xFFFECDD3),
+                onPressed: () => Navigator.pop(dialogContext, 'clear'),
+              ),
+              const SizedBox(height: 8),
+              MeowSecondaryButton(
+                label: 'Đóng',
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'staff':
+        await _openStaffFilterDialog();
+        break;
+      case 'date':
+        await _openSingleDatePicker();
+        break;
+      case 'range':
+        await _openDateRangePicker();
+        break;
+      case 'payment':
+        await _openRadioFilterDialog(
+          title: 'Phương thức thanh toán',
+          options: _availablePaymentMethods.toList(),
+          currentValue: _selectedPaymentMethod,
+          onApply: (val) {
+            _selectedPaymentMethod = val;
+            _applyFilters();
+          },
+        );
+        break;
+      case 'product':
+        await _openRadioFilterDialog(
+          title: 'Chọn sản phẩm',
+          options: _availableProducts.toList(),
+          currentValue: _selectedProduct,
+          onApply: (val) {
+            _selectedProduct = val;
+            _applyFilters();
+          },
+        );
+        break;
+      case 'clear':
+        _clearFilters();
+        break;
+    }
+  }
+
   Future<void> _openStaffFilterDialog() async {
     try {
       final snapshot = await _firestore
@@ -210,7 +333,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            title: const Text('Chọn nhân viên để lọc'),
+            title: const Text(
+              'Chọn nhân viên',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+              ),
+            ),
             content: SizedBox(
               width: double.maxFinite,
               child: staff.isEmpty
@@ -220,6 +349,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       children: staff
                           .map(
                             (entry) => CheckboxListTile(
+                              activeColor: AppColors.brand,
                               title: Text(entry.value),
                               value: tempSelected.contains(entry.key),
                               onChanged: (checked) {
@@ -308,7 +438,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text(title),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
           content: SizedBox(
             width: double.maxFinite,
             child: RadioGroup<String>(
@@ -319,6 +455,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 children: options
                     .map(
                       (opt) => RadioListTile<String>(
+                        activeColor: AppColors.brand,
                         title: Text(opt),
                         value: opt,
                       ),
@@ -350,219 +487,183 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final totalRevenue =
         _filteredSales.fold<double>(0.0, (total, s) => total + s.totalAmount);
+    final isAdmin = _userRole == 'ADMIN';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: Text(
-          _userRole == 'ADMIN' ? 'Thống kê toàn hệ thống' : 'Đơn hàng của bạn',
-          style: const TextStyle(color: Colors.white),
-        ),
-        backgroundColor: colorScheme.primary,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          if (_userRole != null)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.filter_list, color: Colors.white),
-              onSelected: (value) {
-                switch (value) {
-                  case 'staff':
-                    _openStaffFilterDialog();
-                    break;
-                  case 'date':
-                    _openSingleDatePicker();
-                    break;
-                  case 'range':
-                    _openDateRangePicker();
-                    break;
-                  case 'payment':
-                    _openRadioFilterDialog(
-                      title: 'Chọn phương thức thanh toán',
-                      options: _availablePaymentMethods.toList(),
-                      currentValue: _selectedPaymentMethod,
-                      onApply: (val) {
-                        _selectedPaymentMethod = val;
-                        _applyFilters();
-                      },
-                    );
-                    break;
-                  case 'product':
-                    _openRadioFilterDialog(
-                      title: 'Chọn sản phẩm',
-                      options: _availableProducts.toList(),
-                      currentValue: _selectedProduct,
-                      onApply: (val) {
-                        _selectedProduct = val;
-                        _applyFilters();
-                      },
-                    );
-                    break;
-                  case 'clear':
-                    _clearFilters();
-                    break;
-                }
-              },
-              itemBuilder: (_) => [
-                if (_userRole == 'ADMIN')
-                  const PopupMenuItem(
-                    value: 'staff',
-                    child: Text('Lọc theo nhân viên'),
-                  ),
-                const PopupMenuItem(
-                  value: 'date',
-                  child: Text('Lọc theo ngày cụ thể'),
-                ),
-                const PopupMenuItem(
-                  value: 'range',
-                  child: Text('Lọc theo khoảng ngày'),
-                ),
-                const PopupMenuItem(
-                  value: 'payment',
-                  child: Text('Lọc theo phương thức thanh toán'),
-                ),
-                const PopupMenuItem(
-                  value: 'product',
-                  child: Text('Lọc theo sản phẩm'),
-                ),
-                const PopupMenuItem(
-                  value: 'clear',
-                  child: Text('Xóa bộ lọc'),
-                ),
-              ],
-            ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null
-                ? Center(
-                    child: Card(
-                      color: colorScheme.errorContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          _errorMessage!,
-                          style: TextStyle(color: colorScheme.onErrorContainer),
-                        ),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Thống Kê'),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            )
+          : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: MeowCard(
+                      color: AppColors.dangerSoft,
+                      borderColor: const Color(0xFFFECDD3),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: AppColors.danger),
                       ),
                     ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                )
+              : RefreshIndicator(
+                  color: AppColors.brand,
+                  onRefresh: _loadData,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                     children: [
-                      if (_filteredSales.isNotEmpty) ...[
-                        Row(
+                      MeowEditorialHero(
+                        eyebrow: 'MEOW COFFEE',
+                        title: isAdmin
+                            ? 'Thống kê toàn hệ thống'
+                            : 'Đơn hàng của bạn',
+                        subtitle: 'Tổng quan đơn hàng và doanh thu cửa hàng.',
+                      ),
+                      const SizedBox(height: 16),
+                      if (_userRole != null) ...[
+                        MeowSecondaryButton(
+                          label: 'Bộ lọc đơn hàng',
+                          icon: Icons.filter_list_rounded,
+                          onPressed: _openFilterHubDialog,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF30223F),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: AppColors.cardShadow,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: _SummaryCard(
-                                title: 'Tổng đơn',
-                                value: _filteredSales.length.toString(),
-                                icon: Icons.receipt,
+                            const Text(
+                              'TỔNG DOANH THU',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFEDE4F6),
+                                letterSpacing: 0.6,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _SummaryCard(
-                                title: 'Doanh thu',
-                                value: formatVnd(totalRevenue, suffix: 'đ'),
-                                icon: Icons.monetization_on,
+                            const SizedBox(height: 10),
+                            Text(
+                              formatVnd(totalRevenue, suffix: 'đ'),
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFF5D49E),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_filteredSales.length} đơn hàng',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFFEDE4F6),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                      ],
-                      Expanded(
-                        child: _filteredSales.isEmpty
-                            ? const Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.bar_chart,
-                                      size: 64,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'Không có đơn hàng nào',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : RefreshIndicator(
-                                onRefresh: _loadData,
-                                child: ListView.separated(
-                                  itemCount: _filteredSales.length,
-                                  separatorBuilder: (_, _) =>
-                                      const SizedBox(height: 12),
-                                  itemBuilder: (context, index) {
-                                    final sale = _filteredSales[index];
-                                    return _SaleCard(
-                                      sale: sale,
-                                      isAdmin: _userRole == 'ADMIN',
-                                    );
-                                  },
-                                ),
-                              ),
                       ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'ĐƠN HÀNG GẦN ĐÂY',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.muted,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_filteredSales.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 36),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.bar_chart_rounded,
+                                  size: 56,
+                                  color: AppColors.mutedLight,
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  'Không có đơn hàng nào',
+                                  style: TextStyle(color: AppColors.muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        for (final sale in _filteredSales) ...[
+                          _SaleCard(sale: sale, isAdmin: isAdmin),
+                          const SizedBox(height: 12),
+                        ],
                     ],
                   ),
-      ),
+                ),
     );
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  final String title;
-  final String value;
+class _FilterOptionTile extends StatelessWidget {
   final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
 
-  const _SummaryCard({
-    required this.title,
-    required this.value,
+  const _FilterOptionTile({
     required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: colorScheme.primary, size: 22),
-                const SizedBox(width: 6),
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.primary,
+    return Material(
+      color: active ? AppColors.soft : AppColors.bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 19,
+                color: active ? AppColors.brand : AppColors.muted,
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                    color: active ? AppColors.brand : AppColors.ink,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: active ? AppColors.brand : AppColors.mutedLight,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -580,72 +681,87 @@ class _SaleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  sale.saleDate,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  formatVnd(sale.totalAmount, suffix: 'đ'),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
-            if (isAdmin) ...[
-              const SizedBox(height: 4),
+    return MeowCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               Text(
-                'Nhân viên: ${sale.sellerName}',
-                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                sale.saleDate,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.ink,
+                ),
+              ),
+              Text(
+                formatVnd(sale.totalAmount, suffix: 'đ'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14.5,
+                  color: AppColors.brand,
+                ),
               ),
             ],
-            if (sale.paymentMethod != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                'Thanh toán: ${sale.paymentMethod}',
-                style: const TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-            ],
-            if (sale.products.isNotEmpty) ...[
-              const Divider(height: 14),
-              ...sale.products.map((p) {
-                final name = p['product_name']?.toString() ?? '';
-                final qty = p['quantity'] ?? 1;
-                final price = (p['price'] is num)
-                    ? (p['price'] as num).toDouble()
-                    : 0.0;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text('$name x$qty')),
-                      Text(formatVnd(price * (qty is num ? qty.toDouble() : 1),
-                          suffix: 'đ')),
-                    ],
-                  ),
-                );
-              }),
-            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            [
+              if (isAdmin) 'Nhân viên: ${sale.sellerName}',
+              if (sale.paymentMethod != null) sale.paymentMethod!,
+            ].join(' • '),
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          if (sale.products.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...sale.products.map((p) {
+              final name = p['product_name']?.toString() ?? '';
+              final qty = p['quantity'] ?? 1;
+              final price = (p['price'] is num)
+                  ? (p['price'] as num).toDouble()
+                  : 0.0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '$name × $qty',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatVnd(
+                        price * (qty is num ? qty.toDouble() : 1),
+                        suffix: 'đ',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
-        ),
+          const SizedBox(height: 8),
+          const Text(
+            'Đã thanh toán',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.brand,
+            ),
+          ),
+        ],
       ),
     );
   }

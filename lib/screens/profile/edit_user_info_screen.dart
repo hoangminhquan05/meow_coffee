@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../config/env_config.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/meow_ui.dart';
 
 class EditUserInfoScreen extends StatefulWidget {
   final String? userId;
@@ -166,115 +167,114 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Chỉnh Sửa Thông Tin',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: AppColors.deepPurple,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      backgroundColor: AppColors.bg,
+      appBar: const MeowHeader(title: 'Chỉnh Sửa Thông Tin'),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.brand),
+            )
           : _errorMessage != null
               ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadUserData,
-                        child: const Text('Thử lại'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: AppColors.danger),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: 160,
+                          child: MeowSecondaryButton(
+                            label: 'Thử lại',
+                            onPressed: _loadUserData,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 120,
-                        height: 120,
-                        child: Stack(
+                      const MeowEditorialHero(
+                        eyebrow: 'MEOW COFFEE',
+                        title: 'Thông tin của bạn',
+                        subtitle: 'Cập nhật tên và số điện thoại liên hệ.',
+                      ),
+                      const SizedBox(height: 18),
+                      MeowCard(
+                        padding: const EdgeInsets.all(16),
+                        onTap: _pickImage,
+                        child: Row(
                           children: [
                             ClipOval(
-                              child: Container(
-                                width: 120,
-                                height: 120,
-                                color: Colors.grey.shade300,
+                              child: SizedBox(
+                                width: 54,
+                                height: 54,
                                 child: _buildAvatar(),
                               ),
                             ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: InkWell(
-                                onTap: _pickImage,
-                                borderRadius: BorderRadius.circular(18),
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0x80000000),
-                                    shape: BoxShape.circle,
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Ảnh đại diện',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ink,
+                                    ),
                                   ),
-                                  child: const Icon(
-                                    Icons.camera_enhance,
-                                    color: Colors.white,
-                                    size: 20,
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Thay đổi ảnh',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brand,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
+                            ),
+                            const Icon(
+                              Icons.photo_camera_outlined,
+                              color: AppColors.brand,
+                              size: 20,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      TextField(
+                      const SizedBox(height: 18),
+                      MeowFormField(
+                        label: 'TÊN',
                         controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Tên',
-                          border: OutlineInputBorder(),
-                        ),
+                        hintText: 'Nhập họ và tên',
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
+                      const SizedBox(height: 18),
+                      MeowFormField(
+                        label: 'SỐ ĐIỆN THOẠI',
                         controller: _phoneController,
+                        hintText: 'Nhập số điện thoại',
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Số điện thoại',
-                          border: OutlineInputBorder(),
-                        ),
                       ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: _isSaving ? null : _saveChanges,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.deepPurple,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : const Text(
-                                  'Lưu Thay Đổi',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                        ),
+                      const SizedBox(height: 22),
+                      MeowPrimaryButton(
+                        label: 'Lưu thay đổi',
+                        isLoading: _isSaving,
+                        onPressed: _saveChanges,
+                      ),
+                      const SizedBox(height: 12),
+                      MeowSecondaryButton(
+                        label: 'Hủy thay đổi',
+                        onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
