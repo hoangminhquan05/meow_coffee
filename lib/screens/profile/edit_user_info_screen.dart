@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../config/env_config.dart';
+import '../../core/firestore_paths.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
@@ -62,14 +63,16 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
     });
 
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('uSer').doc(uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection(FsCollections.users)
+          .doc(uid)
+          .get();
       if (!mounted) return;
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         _nameController.text = data['name'] as String? ?? '';
-        _phoneController.text = data['soDienThoai'] as String? ?? '';
-        _avtUrl = data['avtUrl'] as String? ?? '';
+        _phoneController.text = data['phone'] as String? ?? '';
+        _avtUrl = data['avt_url'] as String? ?? '';
         setState(() => _isLoading = false);
       } else {
         setState(() {
@@ -128,10 +131,13 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
         );
       }
 
-      await FirebaseFirestore.instance.collection('uSer').doc(uid).update({
+      await FirebaseFirestore.instance
+          .collection(FsCollections.users)
+          .doc(uid)
+          .update({
         'name': name,
-        'soDienThoai': phone,
-        'avtUrl': updatedAvtUrl,
+        'phone': phone,
+        'avt_url': updatedAvtUrl,
       });
 
       if (!mounted) return;

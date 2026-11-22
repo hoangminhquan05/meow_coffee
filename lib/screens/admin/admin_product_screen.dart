@@ -2,7 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/firestore_paths.dart';
 import '../../models/product.dart';
+import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/meow_ui.dart';
@@ -35,13 +37,13 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
   Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
     try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('sanPham').get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection(FsCollections.products)
+          .get();
       if (!mounted) return;
       setState(() {
-        _products = snapshot.docs
-            .map((doc) => Product.fromMap(doc.data(), docId: doc.id))
-            .toList();
+        _products = snapshot.docs.map(Product.fromDoc).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
         _isLoading = false;
       });
     } catch (e) {
@@ -61,7 +63,7 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
   Future<void> _deleteProduct(Product product) async {
     try {
       await FirebaseFirestore.instance
-          .collection('sanPham')
+          .collection(FsCollections.products)
           .doc(product.id)
           .delete();
       if (!mounted) return;
@@ -75,6 +77,22 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi khi xóa sản phẩm: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleAvailable(Product product, bool value) async {
+    try {
+      await ProductService.setAvailable(product.id, value);
+      if (!mounted) return;
+      setState(() {
+        final i = _products.indexWhere((p) => p.id == product.id);
+        if (i >= 0) _products[i] = product.copyWith(isAvailable: value);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi cập nhật trạng thái: $e')),
       );
     }
   }
@@ -343,14 +361,41 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
                                           ),
                                         ),
                                         const SizedBox(height: 3),
-                                        Text(
-                                          product.category.isNotEmpty
-                                              ? product.category
-                                              : 'Chưa phân loại',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.muted,
-                                          ),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                product.category.isNotEmpty
+                                                    ? product.category
+                                                    : 'Chưa phân loại',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.muted,
+                                                ),
+                                              ),
+                                            ),
+                                            Text(
+                                              product.isAvailable
+                                                  ? 'Đang bán'
+                                                  : 'Hết hàng',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: product.isAvailable
+                                                    ? AppColors.success
+                                                    : AppColors.danger,
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              height: 24,
+                                              child: Switch(
+                                                value: product.isAvailable,
+                                                onChanged: (v) =>
+                                                    _toggleAvailable(
+                                                        product, v),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 10),
                                         Row(
@@ -358,10 +403,7 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
                                               MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              formatVnd(
-                                                product.price,
-                                                suffix: '₫',
-                                              ),
+                                              product.priceLabel,
                                               style: const TextStyle(
                                                 fontSize: 13.5,
                                                 fontWeight: FontWeight.w700,

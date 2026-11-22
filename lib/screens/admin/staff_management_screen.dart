@@ -1,8 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/enums.dart';
+import '../../core/firestore_paths.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
@@ -28,14 +29,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     setState(() => _isLoading = true);
     try {
       final snapshot = await FirebaseFirestore.instance
-          .collection('uSer')
-          .where('role', isEqualTo: 'Nhân Viên')
+          .collection(FsCollections.users)
+          .where('role', isEqualTo: UserRole.staff.value)
           .get();
       if (!mounted) return;
       setState(() {
-        _staffList = snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data(), docId: doc.id))
-            .toList();
+        _staffList = snapshot.docs.map(UserModel.fromDoc).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
         _isLoading = false;
       });
     } catch (e) {
@@ -44,41 +44,44 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     }
   }
 
-  Future<void> _deleteStaff(UserModel user) async {
+  /// Khóa / mở khóa tài khoản thay vì xóa, để lịch sử đơn vẫn nguyên vẹn.
+  /// Nhân viên bị khóa đang đăng nhập sẽ bị đăng xuất ngay (Q14).
+  Future<void> _toggleLock(UserModel user) async {
+    final lock = user.isActive;
     final confirmed = await showMeowConfirmDialog(
       context,
-      title: 'Xóa nhân viên',
-      message:
-          'Bạn có chắc chắn muốn xóa nhân viên “${user.name}” khỏi hệ thống?',
-      confirmLabel: 'Xóa nhân viên',
+      title: lock ? 'Khóa tài khoản' : 'Mở khóa tài khoản',
+      message: lock
+          ? 'Khóa “${user.name}”? Nhân viên sẽ bị đăng xuất và không đăng nhập được nữa. Lịch sử đơn vẫn giữ nguyên.'
+          : 'Mở khóa cho “${user.name}” đăng nhập lại?',
+      confirmLabel: lock ? 'Khóa' : 'Mở khóa',
       cancelLabel: 'Hủy',
-      isDanger: true,
+      isDanger: lock,
+      icon: lock ? Icons.lock_outline_rounded : Icons.lock_open_rounded,
     );
-
     if (!confirmed) return;
 
     try {
       await FirebaseFirestore.instance
-          .collection('uSer')
+          .collection(FsCollections.users)
           .doc(user.uid)
-          .delete();
-
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null && currentUser.uid == user.uid) {
-        await currentUser.delete();
-      }
-
+          .update({'is_active': !lock});
       if (!mounted) return;
       setState(() {
-        _staffList.removeWhere((item) => item.uid == user.uid);
+        final i = _staffList.indexWhere((u) => u.uid == user.uid);
+        if (i >= 0) _staffList[i] = user.copyWith(isActive: !lock);
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xóa nhân viên ${user.name}')),
+        SnackBar(
+          content: Text(lock
+              ? 'Đã khóa tài khoản ${user.name}'
+              : 'Đã mở khóa tài khoản ${user.name}'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi xóa nhân viên: $e')),
+        SnackBar(content: Text('Lỗi cập nhật tài khoản: $e')),
       );
     }
   }
@@ -172,21 +175,28 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${user.soDienThoai} • ${user.role}',
-                                    style: const TextStyle(
+                                    '${user.phone} • ${user.role.label}'
+                                    '${user.isActive ? '' : ' • ĐÃ KHÓA'}',
+                                    style: TextStyle(
                                       fontSize: 12.5,
-                                      color: AppColors.muted,
+                                      color: user.isActive
+                                          ? AppColors.muted
+                                          : AppColors.danger,
                                     ),
                                   ),
                                   const SizedBox(height: 10),
                                   GestureDetector(
-                                    onTap: () => _deleteStaff(user),
-                                    child: const Text(
-                                      'Xóa nhân viên',
+                                    onTap: () => _toggleLock(user),
+                                    child: Text(
+                                      user.isActive
+                                          ? 'Khóa tài khoản'
+                                          : 'Mở khóa tài khoản',
                                       style: TextStyle(
                                         fontSize: 12.5,
                                         fontWeight: FontWeight.w600,
-                                        color: AppColors.danger,
+                                        color: user.isActive
+                                            ? AppColors.danger
+                                            : AppColors.success,
                                       ),
                                     ),
                                   ),

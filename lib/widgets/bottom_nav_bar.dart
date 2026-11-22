@@ -26,9 +26,8 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cartCount = context.select<CartProvider, int>(
-      (cart) => cart.cartItems.fold<int>(0, (sum, item) => sum + item.quantity),
-    );
+    final cartCount =
+        context.select<CartProvider, int>((cart) => cart.totalItems);
 
     return Container(
       decoration: const BoxDecoration(

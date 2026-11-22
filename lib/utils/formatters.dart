@@ -1,10 +1,17 @@
 import 'package:intl/intl.dart';
 
-String formatVnd(double amount, {String suffix = 'VND'}) {
+String formatVnd(num amount, {String suffix = 'VND'}) {
   final formatted =
       NumberFormat('#,##0', 'en_US').format(amount).replaceAll(',', '.');
   return '$formatted $suffix';
 }
+
+/// "25.000đ"
+String formatMoney(num amount) => formatVnd(amount, suffix: 'đ').replaceAll(' đ', 'đ');
+
+/// "22/11/2026 08:15"
+String formatDateTime(DateTime? dt) =>
+    dt == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(dt);
 
 /// Removes Vietnamese diacritics and converts to lowercase for accent-insensitive search.
 String normalizeVietnamese(String input) {

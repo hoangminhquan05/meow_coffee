@@ -1,59 +1,75 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../core/enums.dart';
+
+/// Người dùng trong `users/{uid}` (docId = Firebase Auth uid).
 class UserModel {
   final String uid;
-  final String avtUrl;
-  final String email;
   final String name;
-  final String role;
-  final String soDienThoai;
+  final String email;
+  final String phone;
+  final UserRole role;
+  final String avtUrl;
+  final bool isActive;
+  final DateTime? createdAt;
 
   const UserModel({
     this.uid = '',
-    this.avtUrl = '',
-    this.email = '',
     this.name = '',
-    this.role = '',
-    this.soDienThoai = '',
+    this.email = '',
+    this.phone = '',
+    this.role = UserRole.staff,
+    this.avtUrl = '',
+    this.isActive = true,
+    this.createdAt,
   });
 
-  factory UserModel.fromMap(Map<String, dynamic> map, {String? docId}) {
+  bool get isAdmin => role == UserRole.admin;
+
+  factory UserModel.fromMap(Map<String, dynamic> map, {required String uid}) {
+    final created = map['created_at'];
     return UserModel(
-      uid: (map['uid'] as String?)?.isNotEmpty == true
-          ? map['uid'] as String
-          : (docId ?? ''),
-      avtUrl: map['avtUrl'] as String? ?? '',
-      email: map['email'] as String? ?? '',
+      uid: uid,
       name: map['name'] as String? ?? '',
-      role: map['role'] as String? ?? '',
-      soDienThoai: map['soDienThoai'] as String? ?? '',
+      email: map['email'] as String? ?? '',
+      phone: map['phone'] as String? ?? '',
+      role: UserRole.fromValue(map['role'] as String?),
+      avtUrl: map['avt_url'] as String? ?? '',
+      isActive: map['is_active'] as bool? ?? true,
+      createdAt: created is Timestamp ? created.toDate() : null,
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'uid': uid,
-      'avtUrl': avtUrl,
-      'email': email,
-      'name': name,
-      'role': role,
-      'soDienThoai': soDienThoai,
-    };
-  }
+  factory UserModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      UserModel.fromMap(doc.data() ?? const {}, uid: doc.id);
+
+  /// Dữ liệu ghi Firestore (không gồm `created_at`).
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'role': role.value,
+        'avt_url': avtUrl,
+        'is_active': isActive,
+      };
 
   UserModel copyWith({
-    String? uid,
-    String? avtUrl,
-    String? email,
     String? name,
-    String? role,
-    String? soDienThoai,
+    String? email,
+    String? phone,
+    UserRole? role,
+    String? avtUrl,
+    bool? isActive,
   }) {
     return UserModel(
-      uid: uid ?? this.uid,
-      avtUrl: avtUrl ?? this.avtUrl,
-      email: email ?? this.email,
+      uid: uid,
       name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
       role: role ?? this.role,
-      soDienThoai: soDienThoai ?? this.soDienThoai,
+      avtUrl: avtUrl ?? this.avtUrl,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt,
     );
   }
 }

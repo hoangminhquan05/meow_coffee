@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../config/env_config.dart';
+import '../../core/firestore_paths.dart';
+import '../../models/product.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
+import '../../widgets/price_inputs.dart';
 
 class EditProductScreen extends StatefulWidget {
   final String? productId;
@@ -24,7 +27,7 @@ class EditProductScreen extends StatefulWidget {
 
 class _EditProductScreenState extends State<EditProductScreen> {
   final _nameController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _price = PriceFormController();
   final _categoryController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
@@ -43,7 +46,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _priceController.dispose();
+    _price.dispose();
     _categoryController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -57,21 +60,18 @@ class _EditProductScreenState extends State<EditProductScreen> {
     }
 
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('sanPham').doc(id).get();
+      final doc = await FirebaseFirestore.instance
+          .collection(FsCollections.products)
+          .doc(id)
+          .get();
       if (!mounted) return;
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        _nameController.text = data['name'] as String? ?? '';
-        final rawPrice = data['price'];
-        if (rawPrice is num) {
-          _priceController.text = rawPrice == rawPrice.toInt()
-              ? rawPrice.toInt().toString()
-              : rawPrice.toString();
-        }
-        _categoryController.text = data['category'] as String? ?? 'Sữa';
-        _descriptionController.text = data['description'] as String? ?? '';
-        _currentImageUrl = data['imageUrl'] as String? ?? '';
+      if (doc.exists) {
+        final product = Product.fromDoc(doc);
+        _nameController.text = product.name;
+        _price.load(product.prices);
+        _categoryController.text = product.category;
+        _descriptionController.text = product.description;
+        _currentImageUrl = product.imageUrl;
       }
     } catch (e) {
       if (mounted) {
@@ -95,14 +95,14 @@ class _EditProductScreenState extends State<EditProductScreen> {
   Future<void> _updateProduct() async {
     final id = widget.productId;
     final name = _nameController.text.trim();
-    final price = double.tryParse(_priceController.text.trim());
+    final prices = _price.build();
     final category = _categoryController.text.trim();
     final description = _descriptionController.text.trim();
 
     if (id == null ||
         id.isEmpty ||
         name.isEmpty ||
-        price == null ||
+        prices == null ||
         category.isEmpty ||
         description.isEmpty ||
         (_pickedImage == null && _currentImageUrl.isEmpty)) {
@@ -124,12 +124,16 @@ class _EditProductScreenState extends State<EditProductScreen> {
         );
       }
 
-      await FirebaseFirestore.instance.collection('sanPham').doc(id).update({
+      // Không đụng tới is_available; đơn cũ giữ nguyên bản chụp (Q5).
+      await FirebaseFirestore.instance
+          .collection(FsCollections.products)
+          .doc(id)
+          .update({
         'name': name,
-        'price': price,
+        'price': prices,
         'description': description,
         'category': category,
-        'imageUrl': imageUrl,
+        'image_url': imageUrl,
       });
 
       if (!mounted) return;
@@ -265,18 +269,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
                       hintText: 'Nhập tên sản phẩm',
                     ),
                     const SizedBox(height: 16),
-                    MeowFormField(
-                      label: 'GIÁ *',
-                      controller: _priceController,
-                      hintText: 'Nhập giá bán (VNĐ)',
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                    ),
+                    PriceInputs(controller: _price),
                     const SizedBox(height: 16),
                     MeowFormField(
                       label: 'DANH MỤC *',
                       controller: _categoryController,
-                      hintText: 'Trà Hoa Quả, Trà Sữa, Sữa...',
+                      hintText: 'Cà phê, Trà, Bánh...',
                     ),
                     const SizedBox(height: 16),
                     MeowFormField(

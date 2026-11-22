@@ -1,30 +1,18 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/enums.dart';
+import '../../models/order.dart';
+import '../../providers/session_provider.dart';
+import '../../services/order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/date_range_bar.dart';
 import '../../widgets/meow_ui.dart';
+import '../orders/order_history_screen.dart' show OrderListTile;
 
-class _SaleDetail {
-  final String sellerId;
-  final String sellerName;
-  final String saleDate;
-  final List<Map<String, dynamic>> products;
-  final double totalAmount;
-  final String? paymentMethod;
-
-  const _SaleDetail({
-    required this.sellerId,
-    required this.sellerName,
-    required this.saleDate,
-    required this.products,
-    required this.totalAmount,
-    this.paymentMethod,
-  });
-}
-
+/// Thống kê doanh thu (L12). Doanh thu = tổng `total` của đơn `completed`.
+/// Nhân viên chỉ thấy đơn của mình; admin thấy tất cả và lọc theo nhân viên.
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
 
@@ -33,650 +21,316 @@ class StatisticsScreen extends StatefulWidget {
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
-  final _firestore = FirebaseFirestore.instance;
-  final _dateFormat = DateFormat('dd/MM/yyyy');
-  final _dateTimeFormat = DateFormat('dd/MM/yyyy HH:mm');
+  DayRange _range = DayRange.today();
+  String? _sellerId;
+  Stream<List<Order>>? _stream;
+  String? _streamKey;
 
-  List<_SaleDetail> _originalSales = [];
-  List<_SaleDetail> _filteredSales = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-  String? _userRole;
-
-  Set<String> _selectedStaffIds = {};
-  DateTime? _selectedDate;
-  DateTimeRange? _selectedDateRange;
-  String? _selectedPaymentMethod;
-  String? _selectedProduct;
-
-  Set<String> _availableProducts = {};
-  Set<String> _availablePaymentMethods = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      setState(() {
-        _errorMessage = 'Không có ID người dùng';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final userDoc = await _firestore.collection('uSer').doc(uid).get();
-      final role = userDoc.data()?['role'] as String?;
-
-      Query<Map<String, dynamic>> query = _firestore.collection('order_history');
-      if (role != 'ADMIN') {
-        query = query.where('seller_id', isEqualTo: uid);
-      }
-
-      final snapshot = await query.get();
-      final sales = snapshot.docs.map((doc) {
-        final data = doc.data();
-        final rawProducts = data['products'] as List<dynamic>? ?? [];
-        final products = rawProducts
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        final rawTotal = data['total'];
-        final total = rawTotal is num ? rawTotal.toDouble() : 0.0;
-        final method = (data['paymentMethod'] as String?)?.trim();
-
-        return _SaleDetail(
-          sellerId: data['seller_id'] as String? ?? '',
-          sellerName: data['user_name'] as String? ?? 'Không rõ',
-          saleDate: data['time'] as String? ?? 'Không rõ',
-          products: products,
-          totalAmount: total,
-          paymentMethod: (method != null && method.isNotEmpty) ? method : null,
-        );
-      }).toList();
-
-      final productSet = <String>{};
-      final methodSet = <String>{};
-      for (final sale in sales) {
-        for (final p in sale.products) {
-          final pName = p['product_name']?.toString();
-          if (pName != null && pName.isNotEmpty) productSet.add(pName);
-        }
-        if (sale.paymentMethod != null) {
-          methodSet.add(sale.paymentMethod!);
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _userRole = role;
-        _originalSales = sales;
-        _filteredSales = sales;
-        _availableProducts = productSet;
-        _availablePaymentMethods = methodSet;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Lỗi khi tải dữ liệu: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _applyFilters() {
-    setState(() {
-      _filteredSales = _originalSales.where((sale) {
-        if (_selectedStaffIds.isNotEmpty &&
-            !_selectedStaffIds.contains(sale.sellerId)) {
-          return false;
-        }
-
-        if (_selectedDate != null) {
-          final dateStr = _dateFormat.format(_selectedDate!);
-          if (!sale.saleDate.startsWith(dateStr)) return false;
-        }
-
-        if (_selectedDateRange != null) {
-          try {
-            final parsed = _dateTimeFormat.parse(sale.saleDate);
-            final start = DateTime(
-              _selectedDateRange!.start.year,
-              _selectedDateRange!.start.month,
-              _selectedDateRange!.start.day,
-            );
-            final end = DateTime(
-              _selectedDateRange!.end.year,
-              _selectedDateRange!.end.month,
-              _selectedDateRange!.end.day,
-              23,
-              59,
-              59,
-            );
-            if (parsed.isBefore(start) || parsed.isAfter(end)) return false;
-          } catch (_) {
-            return false;
-          }
-        }
-
-        if (_selectedPaymentMethod != null &&
-            sale.paymentMethod != _selectedPaymentMethod) {
-          return false;
-        }
-
-        if (_selectedProduct != null &&
-            !sale.products.any((p) => p['product_name'] == _selectedProduct)) {
-          return false;
-        }
-
-        return true;
-      }).toList();
-    });
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _selectedStaffIds = {};
-      _selectedDate = null;
-      _selectedDateRange = null;
-      _selectedPaymentMethod = null;
-      _selectedProduct = null;
-      _filteredSales = _originalSales;
-    });
-  }
-
-  Future<void> _openFilterHubDialog() async {
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Bộ lọc đơn hàng',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Chọn tiêu chí để xem đúng dữ liệu bạn cần.',
-                style: TextStyle(fontSize: 13, color: AppColors.muted),
-              ),
-              const SizedBox(height: 16),
-              if (_userRole == 'ADMIN') ...[
-                _FilterOptionTile(
-                  icon: Icons.people_outline_rounded,
-                  label: 'Lọc theo nhân viên',
-                  active: _selectedStaffIds.isNotEmpty,
-                  onTap: () => Navigator.pop(dialogContext, 'staff'),
-                ),
-                const SizedBox(height: 8),
-              ],
-              _FilterOptionTile(
-                icon: Icons.calendar_today_outlined,
-                label: 'Lọc theo ngày cụ thể',
-                active: _selectedDate != null,
-                onTap: () => Navigator.pop(dialogContext, 'date'),
-              ),
-              const SizedBox(height: 8),
-              _FilterOptionTile(
-                icon: Icons.date_range_outlined,
-                label: 'Lọc theo khoảng ngày',
-                active: _selectedDateRange != null,
-                onTap: () => Navigator.pop(dialogContext, 'range'),
-              ),
-              const SizedBox(height: 8),
-              _FilterOptionTile(
-                icon: Icons.payments_outlined,
-                label: 'Lọc theo phương thức thanh toán',
-                active: _selectedPaymentMethod != null,
-                onTap: () => Navigator.pop(dialogContext, 'payment'),
-              ),
-              const SizedBox(height: 8),
-              _FilterOptionTile(
-                icon: Icons.local_cafe_outlined,
-                label: 'Lọc theo sản phẩm',
-                active: _selectedProduct != null,
-                onTap: () => Navigator.pop(dialogContext, 'product'),
-              ),
-              const SizedBox(height: 16),
-              MeowSecondaryButton(
-                label: 'Xóa tất cả bộ lọc',
-                textColor: AppColors.danger,
-                backgroundColor: AppColors.dangerSoft,
-                borderColor: const Color(0xFFFECDD3),
-                onPressed: () => Navigator.pop(dialogContext, 'clear'),
-              ),
-              const SizedBox(height: 8),
-              MeowSecondaryButton(
-                label: 'Đóng',
-                onPressed: () => Navigator.pop(dialogContext),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (!mounted || choice == null) return;
-    switch (choice) {
-      case 'staff':
-        await _openStaffFilterDialog();
-        break;
-      case 'date':
-        await _openSingleDatePicker();
-        break;
-      case 'range':
-        await _openDateRangePicker();
-        break;
-      case 'payment':
-        await _openRadioFilterDialog(
-          title: 'Phương thức thanh toán',
-          options: _availablePaymentMethods.toList(),
-          currentValue: _selectedPaymentMethod,
-          onApply: (val) {
-            _selectedPaymentMethod = val;
-            _applyFilters();
-          },
-        );
-        break;
-      case 'product':
-        await _openRadioFilterDialog(
-          title: 'Chọn sản phẩm',
-          options: _availableProducts.toList(),
-          currentValue: _selectedProduct,
-          onApply: (val) {
-            _selectedProduct = val;
-            _applyFilters();
-          },
-        );
-        break;
-      case 'clear':
-        _clearFilters();
-        break;
-    }
-  }
-
-  Future<void> _openStaffFilterDialog() async {
-    try {
-      final snapshot = await _firestore
-          .collection('uSer')
-          .where('role', isEqualTo: 'Nhân Viên')
-          .get();
-      if (!mounted) return;
-      final staff = snapshot.docs
-          .map((d) => MapEntry(d.id, d.data()['name'] as String? ?? 'Không rõ'))
-          .toList();
-
-      final tempSelected = Set<String>.from(_selectedStaffIds);
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => AlertDialog(
-            title: const Text(
-              'Chọn nhân viên',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
-              ),
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: staff.isEmpty
-                  ? const Text('Không có nhân viên nào')
-                  : ListView(
-                      shrinkWrap: true,
-                      children: staff
-                          .map(
-                            (entry) => CheckboxListTile(
-                              activeColor: AppColors.brand,
-                              title: Text(entry.value),
-                              value: tempSelected.contains(entry.key),
-                              onChanged: (checked) {
-                                setDialogState(() {
-                                  if (checked == true) {
-                                    tempSelected.add(entry.key);
-                                  } else {
-                                    tempSelected.remove(entry.key);
-                                  }
-                                });
-                              },
-                            ),
-                          )
-                          .toList(),
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Hủy'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  _selectedStaffIds = tempSelected;
-                  _applyFilters();
-                },
-                child: const Text('Áp dụng'),
-              ),
-            ],
-          ),
-        ),
+  Stream<List<Order>> _ordersStream(SessionProvider session) {
+    final sellerFilter = session.isAdmin ? null : session.uid;
+    final key = '${_range.from}|${_range.to}|$sellerFilter';
+    if (_stream == null || key != _streamKey) {
+      _streamKey = key;
+      _stream = OrderService.watchOrders(
+        from: _range.from,
+        to: _range.to,
+        sellerId: sellerFilter,
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải nhân viên: $e')),
-        );
-      }
     }
-  }
-
-  Future<void> _openSingleDatePicker() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) {
-      _selectedDate = picked;
-      _selectedDateRange = null;
-      _applyFilters();
-    }
-  }
-
-  Future<void> _openDateRangePicker() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      initialDateRange: _selectedDateRange,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) {
-      _selectedDateRange = picked;
-      _selectedDate = null;
-      _applyFilters();
-    }
-  }
-
-  Future<void> _openRadioFilterDialog({
-    required String title,
-    required List<String> options,
-    required String? currentValue,
-    required ValueChanged<String?> onApply,
-  }) async {
-    if (options.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không có dữ liệu để lọc')),
-      );
-      return;
-    }
-
-    var temp = currentValue;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-            ),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: RadioGroup<String>(
-              groupValue: temp,
-              onChanged: (value) => setDialogState(() => temp = value),
-              child: ListView(
-                shrinkWrap: true,
-                children: options
-                    .map(
-                      (opt) => RadioListTile<String>(
-                        activeColor: AppColors.brand,
-                        title: Text(opt),
-                        value: opt,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                onApply(null);
-              },
-              child: const Text('Bỏ lọc'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                onApply(temp);
-              },
-              child: const Text('Áp dụng'),
-            ),
-          ],
-        ),
-      ),
-    );
+    return _stream!;
   }
 
   @override
   Widget build(BuildContext context) {
-    final totalRevenue =
-        _filteredSales.fold<double>(0.0, (total, s) => total + s.totalAmount);
-    final isAdmin = _userRole == 'ADMIN';
+    final session = context.watch<SessionProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: const MeowHeader(title: 'Thống Kê'),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
-            )
-          : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: MeowCard(
-                      color: AppColors.dangerSoft,
-                      borderColor: const Color(0xFFFECDD3),
-                      child: Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: AppColors.danger),
-                      ),
+      appBar: MeowHeader(
+        title: session.isAdmin ? 'Thống Kê Doanh Thu' : 'Doanh Thu Của Tôi',
+      ),
+      body: StreamBuilder<List<Order>>(
+        stream: _ordersStream(session),
+        builder: (context, snapshot) {
+          final all = snapshot.data ?? const <Order>[];
+          final sellers = <String, String>{
+            for (final o in all)
+              if (o.seller != null) o.seller!.id: o.seller!.name,
+          };
+          final orders = _sellerId == null
+              ? all
+              : all.where((o) => o.seller?.id == _sellerId).toList();
+          final stats = _Stats.from(orders);
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              DateRangeBar(
+                value: _range,
+                onChanged: (r) => setState(() => _range = r),
+              ),
+              if (session.isAdmin && sellers.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String?>(
+                  initialValue:
+                      sellers.containsKey(_sellerId) ? _sellerId : null,
+                  decoration: InputDecoration(
+                    labelText: 'Nhân viên',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Tất cả')),
+                    for (final e in sellers.entries)
+                      DropdownMenuItem(value: e.key, child: Text(e.value)),
+                  ],
+                  onChanged: (v) => setState(() => _sellerId = v),
+                ),
+              ],
+              const SizedBox(height: 14),
+              if (snapshot.hasError)
+                Text(
+                  'Lỗi tải dữ liệu: ${snapshot.error}',
+                  style: const TextStyle(color: AppColors.danger),
                 )
-              : RefreshIndicator(
-                  color: AppColors.brand,
-                  onRefresh: _loadData,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-                    children: [
-                      MeowEditorialHero(
-                        eyebrow: 'MEOW COFFEE',
-                        title: isAdmin
-                            ? 'Thống kê toàn hệ thống'
-                            : 'Đơn hàng của bạn',
-                        subtitle: 'Tổng quan đơn hàng và doanh thu cửa hàng.',
+              else if (!snapshot.hasData)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppColors.brand),
+                  ),
+                )
+              else ...[
+                _RevenueCard(stats: stats),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MiniStat(
+                        label: 'Đơn hoàn tất',
+                        value: '${stats.completedCount}',
                       ),
-                      const SizedBox(height: 16),
-                      if (_userRole != null) ...[
-                        MeowSecondaryButton(
-                          label: 'Bộ lọc đơn hàng',
-                          icon: Icons.filter_list_rounded,
-                          onPressed: _openFilterHubDialog,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF30223F),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: AppColors.cardShadow,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'TỔNG DOANH THU',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFEDE4F6),
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              formatVnd(totalRevenue, suffix: 'đ'),
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFF5D49E),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${_filteredSales.length} đơn hàng',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFFEDE4F6),
-                              ),
-                            ),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MiniStat(
+                        label: 'TB / đơn',
+                        value: formatMoney(stats.averageOrder),
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'ĐƠN HÀNG GẦN ĐÂY',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.muted,
-                          letterSpacing: 0.6,
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MiniStat(
+                        label: 'Đơn đã hủy',
+                        value: '${stats.cancelledCount}',
+                        danger: stats.cancelledCount > 0,
                       ),
-                      const SizedBox(height: 12),
-                      if (_filteredSales.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 36),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.bar_chart_rounded,
-                                  size: 56,
-                                  color: AppColors.mutedLight,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  'Không có đơn hàng nào',
-                                  style: TextStyle(color: AppColors.muted),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        for (final sale in _filteredSales) ...[
-                          _SaleCard(sale: sale, isAdmin: isAdmin),
-                          const SizedBox(height: 12),
-                        ],
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _BreakdownCard(
+                  title: 'THEO PHƯƠNG THỨC THANH TOÁN',
+                  rows: {
+                    for (final m in PaymentMethod.values)
+                      m.label: stats.byMethod[m] ?? 0,
+                  },
+                  total: stats.revenue,
+                ),
+                const SizedBox(height: 12),
+                _BreakdownCard(
+                  title: 'THEO LOẠI ĐƠN',
+                  rows: {
+                    Fulfillment.dineIn.label:
+                        stats.byFulfillment[Fulfillment.dineIn] ?? 0,
+                    Fulfillment.takeaway.label:
+                        stats.byFulfillment[Fulfillment.takeaway] ?? 0,
+                  },
+                  total: stats.revenue,
+                ),
+                const SizedBox(height: 12),
+                _TopProductsCard(top: stats.topProducts),
+                const SizedBox(height: 18),
+                const Text(
+                  'ĐƠN HÀNG',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF475569),
+                    letterSpacing: 0.5,
                   ),
                 ),
+                const SizedBox(height: 8),
+                if (orders.isEmpty)
+                  const Text(
+                    'Không có đơn trong khoảng thời gian này',
+                    style: TextStyle(color: AppColors.muted),
+                  )
+                else
+                  for (final o in orders) ...[
+                    OrderListTile(order: o, showSeller: session.isAdmin),
+                    const SizedBox(height: 10),
+                  ],
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
-class _FilterOptionTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
+class _Stats {
+  final int revenue;
+  final int completedCount;
+  final int cancelledCount;
+  final Map<PaymentMethod, int> byMethod;
+  final Map<Fulfillment, int> byFulfillment;
+  final List<MapEntry<String, int>> topProducts; // tên → số lượng
 
-  const _FilterOptionTile({
-    required this.icon,
+  _Stats({
+    required this.revenue,
+    required this.completedCount,
+    required this.cancelledCount,
+    required this.byMethod,
+    required this.byFulfillment,
+    required this.topProducts,
+  });
+
+  int get averageOrder => completedCount == 0 ? 0 : revenue ~/ completedCount;
+
+  factory _Stats.from(List<Order> orders) {
+    var revenue = 0, completed = 0, cancelled = 0;
+    final byMethod = <PaymentMethod, int>{};
+    final byFulfillment = <Fulfillment, int>{};
+    final qtyById = <String, int>{};
+    final nameById = <String, String>{};
+    for (final o in orders) {
+      if (o.status == OrderStatus.cancelled) {
+        cancelled++;
+        continue;
+      }
+      if (o.status != OrderStatus.completed) continue;
+      completed++;
+      revenue += o.total;
+      byMethod[o.paymentMethod] = (byMethod[o.paymentMethod] ?? 0) + o.total;
+      byFulfillment[o.fulfillment] =
+          (byFulfillment[o.fulfillment] ?? 0) + o.total;
+      for (final i in o.items) {
+        qtyById[i.productId] = (qtyById[i.productId] ?? 0) + i.quantity;
+        nameById[i.productId] = i.name;
+      }
+    }
+    final top = qtyById.entries
+        .map((e) => MapEntry(nameById[e.key] ?? e.key, e.value))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return _Stats(
+      revenue: revenue,
+      completedCount: completed,
+      cancelledCount: cancelled,
+      byMethod: byMethod,
+      byFulfillment: byFulfillment,
+      topProducts: top.take(5).toList(),
+    );
+  }
+}
+
+class _RevenueCard extends StatelessWidget {
+  final _Stats stats;
+
+  const _RevenueCard({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: AppColors.buttonShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DOANH THU',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFE9DFFF),
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            formatMoney(stats.revenue),
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            'Không tính ${stats.cancelledCount} đơn đã hủy',
+            style: const TextStyle(fontSize: 12, color: Color(0xFFEEE6FF)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool danger;
+
+  const _MiniStat({
     required this.label,
-    required this.active,
-    required this.onTap,
+    required this.value,
+    this.danger = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: active ? AppColors.soft : AppColors.bg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 19,
-                color: active ? AppColors.brand : AppColors.muted,
+    return MeowCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: danger ? AppColors.danger : AppColors.ink,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                    color: active ? AppColors.brand : AppColors.ink,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: active ? AppColors.brand : AppColors.mutedLight,
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _SaleCard extends StatelessWidget {
-  final _SaleDetail sale;
-  final bool isAdmin;
+class _BreakdownCard extends StatelessWidget {
+  final String title;
+  final Map<String, int> rows;
+  final int total;
 
-  const _SaleCard({
-    required this.sale,
-    required this.isAdmin,
+  const _BreakdownCard({
+    required this.title,
+    required this.rows,
+    required this.total,
   });
 
   @override
@@ -684,83 +338,115 @@ class _SaleCard extends StatelessWidget {
     return MeowCard(
       padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                sale.saleDate,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.ink,
-                ),
-              ),
-              Text(
-                formatVnd(sale.totalAmount, suffix: 'đ'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14.5,
-                  color: AppColors.brand,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
           Text(
-            [
-              if (isAdmin) 'Nhân viên: ${sale.sellerName}',
-              if (sale.paymentMethod != null) sale.paymentMethod!,
-            ].join(' • '),
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            title,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF475569),
+              letterSpacing: 0.5,
+            ),
           ),
-          if (sale.products.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...sale.products.map((p) {
-              final name = p['product_name']?.toString() ?? '';
-              final qty = p['quantity'] ?? 1;
-              final price = (p['price'] is num)
-                  ? (p['price'] as num).toDouble()
-                  : 0.0;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 3),
+          const SizedBox(height: 10),
+          for (final e in rows.entries) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(e.key,
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.inkSlate)),
+                ),
+                Text(
+                  formatMoney(e.value),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    total == 0 ? '0%' : '${(e.value * 100 / total).round()}%',
+                    textAlign: TextAlign.right,
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: total == 0 ? 0 : e.value / total,
+                minHeight: 6,
+                backgroundColor: AppColors.soft,
+                color: AppColors.brand,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TopProductsCard extends StatelessWidget {
+  final List<MapEntry<String, int>> top;
+
+  const _TopProductsCard({required this.top});
+
+  @override
+  Widget build(BuildContext context) {
+    return MeowCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'MÓN BÁN CHẠY',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF475569),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (top.isEmpty)
+            const Text('Chưa có dữ liệu',
+                style: TextStyle(color: AppColors.muted))
+          else
+            for (var i = 0; i < top.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppColors.soft,
                       child: Text(
-                        '$name × $qty',
+                        '${i + 1}',
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.muted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.brand,
                         ),
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(top[i].key)),
                     Text(
-                      formatVnd(
-                        price * (qty is num ? qty.toDouble() : 1),
-                        suffix: 'đ',
-                      ),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.muted,
-                      ),
+                      '${top[i].value} ly',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
-              );
-            }),
-          ],
-          const SizedBox(height: 8),
-          const Text(
-            'Đã thanh toán',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brand,
-            ),
-          ),
+              ),
         ],
       ),
     );

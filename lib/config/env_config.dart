@@ -12,9 +12,30 @@ class EnvConfig {
   }
 
   // Firebase
+  /// API key của app Android (dùng mặc định cho nền tảng khác nếu thiếu key riêng).
   static String get firebaseApiKey => _get(
         'FIREBASE_API_KEY',
         fallback: const String.fromEnvironment('FIREBASE_API_KEY'),
+      );
+
+  static String get firebaseIosApiKey => _get(
+        'FIREBASE_IOS_API_KEY',
+        fallback: const String.fromEnvironment('FIREBASE_IOS_API_KEY'),
+      );
+
+  static String get firebaseWebApiKey => _get(
+        'FIREBASE_WEB_API_KEY',
+        fallback: const String.fromEnvironment('FIREBASE_WEB_API_KEY'),
+      );
+
+  static String get firebaseWebAppId => _get(
+        'FIREBASE_WEB_APP_ID',
+        fallback: const String.fromEnvironment('FIREBASE_WEB_APP_ID'),
+      );
+
+  static String get firebaseAuthDomain => _get(
+        'FIREBASE_AUTH_DOMAIN',
+        fallback: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
       );
 
   static String get firebaseProjectId => _get(
@@ -47,34 +68,44 @@ class EnvConfig {
         fallback: const String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID'),
       );
 
-  static String get firebaseWindowsAppId => _get(
-        'FIREBASE_WINDOWS_APP_ID',
-        fallback: const String.fromEnvironment('FIREBASE_WINDOWS_APP_ID'),
-      );
+  static String _or(String value, String fallback) =>
+      value.isNotEmpty ? value : fallback;
 
+  /// Android → app Android; iOS/macOS → app iOS; Web/Windows/Linux → app Web.
   static FirebaseOptions? get firebaseOptions {
-    if (firebaseApiKey.isEmpty || firebaseProjectId.isEmpty) return null;
-    String appId = firebaseAndroidAppId;
-    if (!kIsWeb) {
-      switch (defaultTargetPlatform) {
-        case TargetPlatform.iOS:
-        case TargetPlatform.macOS:
-          if (firebaseIosAppId.isNotEmpty) appId = firebaseIosAppId;
-          break;
-        case TargetPlatform.windows:
-          if (firebaseWindowsAppId.isNotEmpty) appId = firebaseWindowsAppId;
-          break;
-        default:
-          break;
-      }
+    if (firebaseProjectId.isEmpty) return null;
+
+    var apiKey = firebaseApiKey;
+    var appId = firebaseAndroidAppId;
+    String? authDomain;
+    String? iosBundleId;
+
+    final isWebLike = kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    final isApple = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+
+    if (isWebLike) {
+      apiKey = _or(firebaseWebApiKey, apiKey);
+      appId = _or(firebaseWebAppId, appId);
+      authDomain = firebaseAuthDomain.isEmpty ? null : firebaseAuthDomain;
+    } else if (isApple) {
+      apiKey = _or(firebaseIosApiKey, apiKey);
+      appId = _or(firebaseIosAppId, appId);
+      iosBundleId = firebaseIosBundleId.isEmpty ? null : firebaseIosBundleId;
     }
+
+    if (apiKey.isEmpty || appId.isEmpty) return null;
     return FirebaseOptions(
-      apiKey: firebaseApiKey,
+      apiKey: apiKey,
       appId: appId,
       messagingSenderId: firebaseMessagingSenderId,
       projectId: firebaseProjectId,
+      authDomain: authDomain,
       storageBucket: firebaseStorageBucket.isEmpty ? null : firebaseStorageBucket,
-      iosBundleId: firebaseIosBundleId.isEmpty ? null : firebaseIosBundleId,
+      iosBundleId: iosBundleId,
     );
   }
 

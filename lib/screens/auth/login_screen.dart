@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
 
@@ -22,6 +24,23 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   static final _emailRegex = RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[\w\-]{2,}$');
+
+  @override
+  void initState() {
+    super.initState();
+    // Hiện lý do nếu vừa bị đăng xuất do khóa tài khoản / mất quyền (Q14).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final session = context.read<SessionProvider>();
+      final message = SessionProvider.endReasonMessage(session.lastEndReason);
+      session.lastEndReason = null;
+      if (message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -58,13 +77,20 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
+      if (!mounted || credential.user == null) return;
+      // Chờ nạp hồ sơ users/{uid}: chưa có hồ sơ hoặc bị khóa → bị đăng xuất.
+      final error = await context.read<SessionProvider>().waitForProfile();
       if (!mounted) return;
-      if (credential.user != null) {
+      if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('☕ Đăng nhập thành công!')),
+          SnackBar(content: Text(error)),
         );
-        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('☕ Đăng nhập thành công!')),
+      );
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       String message;

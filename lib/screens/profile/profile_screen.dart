@@ -1,8 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/cart_provider.dart';
+import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/meow_ui.dart';
@@ -15,81 +16,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String? _role;
-  String? _avtUrl;
-  String? _name;
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  String? get _userId => FirebaseAuth.instance.currentUser?.uid;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserProfile();
-  }
-
-  Future<void> _loadUserProfile() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final uid = currentUser?.uid;
-    if (uid == null) {
-      setState(() {
-        _errorMessage = 'Không có ID người dùng';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    try {
-      final usersCol = FirebaseFirestore.instance.collection('uSer');
-      Map<String, dynamic>? data;
-
-      final doc = await usersCol.doc(uid).get();
-      if (doc.exists && doc.data() != null) {
-        data = doc.data();
-      } else {
-        final byUid =
-            await usersCol.where('uid', isEqualTo: uid).limit(1).get();
-        if (byUid.docs.isNotEmpty) {
-          data = byUid.docs.first.data();
-        } else if (currentUser?.email != null &&
-            currentUser!.email!.isNotEmpty) {
-          final byEmail = await usersCol
-              .where('email', isEqualTo: currentUser.email)
-              .limit(1)
-              .get();
-          if (byEmail.docs.isNotEmpty) {
-            data = byEmail.docs.first.data();
-          }
-        }
-      }
-
-      if (!mounted) return;
-      if (data != null) {
-        setState(() {
-          _role = data!['role'] as String?;
-          _avtUrl = data['avtUrl'] as String?;
-          _name = data['name'] as String?;
-          _errorMessage = null;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _role = 'Nhân viên';
-          _errorMessage = null;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Lỗi khi tải dữ liệu: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
   Future<void> _confirmLogout() async {
+    final cart = context.read<CartProvider>();
+    final session = context.read<SessionProvider>();
     final confirmed = await showMeowConfirmDialog(
       context,
       title: 'Xác nhận đăng xuất',
@@ -101,7 +30,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirmed) {
-      await FirebaseAuth.instance.signOut();
+      await session.signOut();
+      cart.clear();
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
@@ -109,15 +39,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = _userId;
-    final displayName = (_name != null && _name!.trim().isNotEmpty)
-        ? _name!.trim()
-        : (FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty ==
-                true
-            ? FirebaseAuth.instance.currentUser!.displayName!
-            : (_isLoading ? 'Đang tải...' : 'Người dùng'));
-
-    final isAdmin = _role == 'ADMIN';
+    // Thông tin người dùng lấy realtime từ SessionProvider.
+    final session = context.watch<SessionProvider>();
+    final user = session.user;
+    final uid = user?.uid;
+    final displayName = (user?.name.trim().isNotEmpty ?? false)
+        ? user!.name.trim()
+        : (session.isLoading ? 'Đang tải...' : 'Người dùng');
+    final isAdmin = session.isAdmin;
 
     final menuItems = <_ProfileMenuItem>[
       _ProfileMenuItem(
@@ -126,10 +55,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         icon: Icons.person_outline_rounded,
         onTap: () {
           if (uid != null) {
-            Navigator.pushNamed(context, '/thongtincanhan', arguments: uid)
-                .then((_) => _loadUserProfile());
+            Navigator.pushNamed(context, '/thongtincanhan', arguments: uid);
           }
         },
+      ),
+      _ProfileMenuItem(
+        title: 'Lịch sử đơn hàng',
+        subtitle: isAdmin
+            ? 'Xem, in lại, hủy đơn của mọi nhân viên'
+            : 'Xem, in lại, hủy đơn của bạn',
+        icon: Icons.receipt_long_outlined,
+        onTap: () => Navigator.pushNamed(context, '/order_history'),
       ),
       _ProfileMenuItem(
         title: 'Đổi mật khẩu',
@@ -188,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.brand,
-          onRefresh: _loadUserProfile,
+          onRefresh: () async {},
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -196,11 +132,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ProfileHeroCard(
-                  avtUrl: _avtUrl,
+                  avtUrl: user?.avtUrl,
                   displayName: displayName,
-                  roleText: _isLoading
+                  roleText: session.isLoading
                       ? 'Đang tải...'
-                      : (_errorMessage ?? _role ?? 'Nhân viên'),
+                      : (user?.role.label ?? 'Nhân viên'),
                   isAdmin: isAdmin,
                   onEditAvatar: () {
                     if (uid != null) {
@@ -208,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         '/thongtincanhan',
                         arguments: uid,
-                      ).then((_) => _loadUserProfile());
+                      );
                     }
                   },
                 ),

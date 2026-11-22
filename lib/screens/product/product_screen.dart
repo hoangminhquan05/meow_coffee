@@ -1,12 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../models/product.dart';
-import '../../providers/cart_provider.dart';
+import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/add_to_cart_sheet.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
 class ProductScreen extends StatefulWidget {
@@ -17,24 +16,13 @@ class ProductScreen extends StatefulWidget {
 }
 
 class _ProductScreenState extends State<ProductScreen> {
+  static const _allCategories = 'Tất cả';
+
   final TextEditingController _searchController = TextEditingController();
-  List<Product> _products = [];
+  // Realtime: thấy ngay món bị đánh dấu hết hàng (L10).
+  late final Stream<List<Product>> _productsStream = ProductService.watchAll();
   String _query = '';
-  bool _isLoading = true;
-
-  static const List<String> _displayCategories = [
-    'Tất cả',
-    'Cà phê',
-    'Sữa chua',
-    'Trà đào & trái cây',
-    'Trà sữa',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProducts();
-  }
+  String _category = _allCategories;
 
   @override
   void dispose() {
@@ -42,39 +30,37 @@ class _ProductScreenState extends State<ProductScreen> {
     super.dispose();
   }
 
-  Future<void> _loadProducts() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('sanPham').get();
-      if (!mounted) return;
-      setState(() {
-        _products = snapshot.docs
-            .map((doc) => Product.fromMap(doc.data(), docId: doc.id))
-            .toList();
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint('ProductScreen._loadProducts error: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  List<Product> get _filteredProducts {
-    if (_query.isEmpty) return _products;
+  List<Product> _filter(List<Product> products) {
     final normalizedQuery = normalizeVietnamese(_query);
-    return _products
-        .where(
-          (product) =>
-              normalizeVietnamese(product.name).contains(normalizedQuery),
-        )
-        .toList();
+    return products.where((p) {
+      if (_category != _allCategories && p.category != _category) return false;
+      if (_query.isEmpty) return true;
+      return normalizeVietnamese(p.name).contains(normalizedQuery);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredProducts;
+    return StreamBuilder<List<Product>>(
+      stream: _productsStream,
+      builder: (context, snapshot) =>
+          _buildScaffold(context, snapshot.data, snapshot.error),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    List<Product>? products,
+    Object? error,
+  ) {
+    final isLoading = products == null && error == null;
+    final all = products ?? const <Product>[];
+    final categories = <String>[
+      _allCategories,
+      ...{for (final p in all) if (p.category.isNotEmpty) p.category},
+    ];
+    if (!categories.contains(_category)) _category = _allCategories;
+    final filtered = _filter(all);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -236,10 +222,10 @@ class _ProductScreenState extends State<ProductScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'Danh Mục Đồ Uống',
                         style: TextStyle(
                           fontSize: 18,
@@ -249,8 +235,8 @@ class _ProductScreenState extends State<ProductScreen> {
                         ),
                       ),
                       Text(
-                        '6 phân loại',
-                        style: TextStyle(
+                        '${categories.length - 1} phân loại',
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: AppColors.muted,
@@ -263,38 +249,60 @@ class _ProductScreenState extends State<ProductScreen> {
                     height: 34,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: _displayCategories.length,
+                      itemCount: categories.length,
                       separatorBuilder: (_, _) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
-                        final isFirst = index == 0;
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isFirst ? AppColors.brand : AppColors.soft,
-                            borderRadius: BorderRadius.circular(999),
-                            border: isFirst
-                                ? null
-                                : Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Text(
-                            _displayCategories[index],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight:
-                                  isFirst ? FontWeight.w700 : FontWeight.w600,
-                              color: isFirst ? Colors.white : AppColors.ink,
+                        final cat = categories[index];
+                        final selected = cat == _category;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () => setState(() => _category = cat),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 14),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color:
+                                  selected ? AppColors.brand : AppColors.soft,
+                              borderRadius: BorderRadius.circular(999),
+                              border: selected
+                                  ? null
+                                  : Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Text(
+                              cat,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color:
+                                    selected ? Colors.white : AppColors.ink,
+                              ),
                             ),
                           ),
                         );
                       },
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Nhấn giữ món để đánh dấu hết hàng / bán lại',
+                    style: TextStyle(fontSize: 11, color: AppColors.mutedLight),
+                  ),
                 ],
               ),
             ),
             Expanded(
-              child: _isLoading
+              child: error != null
+                  ? Center(
+                      child: Text(
+                        'Lỗi tải sản phẩm: $error',
+                        style: const TextStyle(color: AppColors.danger),
+                      ),
+                    )
+                  : isLoading
                   ? const Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -310,48 +318,29 @@ class _ProductScreenState extends State<ProductScreen> {
                     )
                   : filtered.isEmpty
                       ? _EmptyProductState(hasQuery: _query.isNotEmpty)
-                      : RefreshIndicator(
-                          color: AppColors.brand,
-                          onRefresh: _loadProducts,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 14),
-                            itemBuilder: (context, index) {
-                              final product = filtered[index];
-                              return _ProductCard(
-                                product: product,
-                                onTap: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/product_detail',
-                                    arguments: product.id,
-                                  );
-                                },
-                                onAddToCart: () {
-                                  context
-                                      .read<CartProvider>()
-                                      .addToCart(product);
-                                  ScaffoldMessenger.of(context)
-                                    ..hideCurrentSnackBar()
-                                    ..showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Đã thêm ${product.name} vào giỏ hàng',
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                        action: SnackBarAction(
-                                          label: 'Đóng',
-                                          textColor: AppColors.storyGold,
-                                          onPressed: () {},
-                                        ),
-                                      ),
-                                    );
-                                },
-                              );
-                            },
-                          ),
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 14),
+                          itemBuilder: (context, index) {
+                            final product = filtered[index];
+                            return _ProductCard(
+                              product: product,
+                              onTap: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/product_detail',
+                                  arguments: product.id,
+                                );
+                              },
+                              onLongPress: () =>
+                                  showAvailabilitySheet(context, product),
+                              // "+" mở bảng chọn size (Q11).
+                              onAddToCart: () =>
+                                  showAddToCartSheet(context, product),
+                            );
+                          },
                         ),
             ),
           ],
@@ -364,17 +353,22 @@ class _ProductScreenState extends State<ProductScreen> {
 class _ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final VoidCallback onAddToCart;
 
   const _ProductCard({
     required this.product,
     required this.onTap,
+    required this.onLongPress,
     required this.onAddToCart,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final soldOut = !product.isAvailable;
+    return Opacity(
+      opacity: soldOut ? 0.55 : 1,
+      child: Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -386,6 +380,7 @@ class _ProductCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -451,7 +446,7 @@ class _ProductCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              product.formattedPrice,
+                              product.priceLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -463,22 +458,25 @@ class _ProductCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Material(
-                            color: AppColors.soft,
+                            color:
+                                soldOut ? AppColors.dangerSoft : AppColors.soft,
                             borderRadius: BorderRadius.circular(10),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(10),
-                              onTap: onAddToCart,
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
+                              onTap: soldOut ? null : onAddToCart,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 5,
                                 ),
                                 child: Text(
-                                  '+ Thêm',
+                                  soldOut ? 'Hết hàng' : '+ Thêm',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.brand,
+                                    color: soldOut
+                                        ? AppColors.danger
+                                        : AppColors.brand,
                                   ),
                                 ),
                               ),
@@ -493,6 +491,7 @@ class _ProductCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

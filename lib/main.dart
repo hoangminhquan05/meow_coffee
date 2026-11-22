@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'config/env_config.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/session_provider.dart';
 import 'screens/admin/add_product_screen.dart';
 import 'screens/admin/add_staff_screen.dart';
 import 'screens/admin/admin_product_screen.dart';
@@ -19,7 +20,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/cart/cart_screen.dart';
 import 'screens/home/home_screen.dart';
-import 'screens/payment/invoice_screen.dart';
+import 'screens/orders/order_detail_screen.dart';
+import 'screens/orders/order_history_screen.dart';
 import 'screens/payment/payment_screen.dart';
 import 'screens/product/product_detail_screen.dart';
 import 'screens/product/product_screen.dart';
@@ -36,6 +38,8 @@ Future<void> main() async {
   runApp(const MeowCoffeeApp());
 }
 
+final _navigatorKey = GlobalKey<NavigatorState>();
+
 class MeowCoffeeApp extends StatelessWidget {
   const MeowCoffeeApp({super.key});
 
@@ -45,8 +49,22 @@ class MeowCoffeeApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => BannerProvider()),
+        ChangeNotifierProvider(
+          lazy: false,
+          create: (ctx) {
+            final session = SessionProvider();
+            // Bị khóa / mất quyền khi đang dùng → xóa giỏ, về đăng nhập (Q14).
+            session.onForcedSignOut = () {
+              ctx.read<CartProvider>().clear();
+              _navigatorKey.currentState
+                  ?.pushNamedAndRemoveUntil('/login', (route) => false);
+            };
+            return session;
+          },
+        ),
       ],
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'Meow Coffee',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
@@ -78,14 +96,14 @@ class MeowCoffeeApp extends StatelessWidget {
               return MaterialPageRoute(builder: (_) => const CartScreen());
             case '/payment':
               return MaterialPageRoute(builder: (_) => const PaymentScreen());
-            case '/invoice_screen':
-              final args = settings.arguments as Map<String, String>? ?? {};
+            case '/order_history':
               return MaterialPageRoute(
-                builder: (_) => InvoiceScreen(
-                  userName: args['userName'] ?? 'Không rõ',
-                  currentDate: args['currentDate'] ?? '',
-                  paymentMethod: args['paymentMethod'] ?? 'Tiền mặt',
-                ),
+                builder: (_) => const OrderHistoryScreen(),
+              );
+            case '/order_detail':
+              final orderId = settings.arguments as String? ?? '';
+              return MaterialPageRoute(
+                builder: (_) => OrderDetailScreen(orderId: orderId),
               );
             case '/profile':
               return MaterialPageRoute(builder: (_) => const ProfileScreen());

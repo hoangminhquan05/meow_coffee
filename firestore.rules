@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Firestore Security Rules – Meow Coffee (bán tại quán).
+// Xem docs/ke-hoach-ban-tai-quan.md mục 5.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isActive() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && me().is_active == true;
+    }
+    function isAdmin() { return isActive() && me().role == 'admin'; }
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // Sản phẩm: ai cũng đọc; nhân viên chỉ bật/tắt hết hàng (Q9); admin toàn quyền.
+    match /products/{id} {
+      allow read: if isActive();
+      allow update: if isActive() && onlyChanges(['is_available']);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /banners/{id} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    // Bàn: nhân viên chỉ đổi trạng thái (L11); admin thêm/sửa/xóa.
+    match /tables/{id} {
+      allow read: if isActive();
+      allow update: if isActive() && onlyChanges(['status', 'updated_at']);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Bộ đếm mã đơn theo ngày: chỉ tăng 1 mỗi lần.
+    match /counters/{id} {
+      allow read: if isActive();
+      allow create: if isActive() && request.resource.data.seq == 1;
+      allow update: if isActive() && request.resource.data.seq == resource.data.seq + 1;
+    }
+
+    match /orders/{id} {
+      allow read: if isAdmin()
+        || (isActive() && resource.data.seller.id == request.auth.uid);
+
+      // Tạo đơn tại quán: thu tiền trước (Q2); tại quán bắt buộc có bàn (Q13).
+      allow create: if isActive()
+        && request.resource.data.channel == 'in_store'
+        && request.resource.data.status == 'completed'
+        && request.resource.data.payment_status == 'paid'
+        && request.resource.data.seller.id == request.auth.uid
+        && request.resource.data.total == request.resource.data.subtotal - request.resource.data.discount
+        && (request.resource.data.fulfillment == 'takeaway'
+              ? request.resource.data.table_number == null
+              : (request.resource.data.fulfillment == 'dine_in'
+                  && request.resource.data.table_number is int));
+
+      // Hủy đơn (Q7): admin mọi lúc; nhân viên chỉ đơn của mình trong 30 phút.
+      // Không được sửa trường nào khác của đơn (Q5).
+      allow update: if isActive()
+        && resource.data.status == 'completed'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.payment_status == 'refunded'
+        && request.resource.data.cancel_reason is string
+        && request.resource.data.cancel_reason.size() > 0
+        && request.resource.data.cancelled_by.id == request.auth.uid
+        && onlyChanges(['status', 'payment_status', 'cancelled_at', 'cancelled_by', 'cancel_reason'])
+        && (isAdmin()
+            || (resource.data.seller.id == request.auth.uid
+                && request.time < resource.data.created_at + duration.value(30, 'm')));
+
+      allow delete: if false;
+    }
+
+    // Người dùng: tự sửa tên/SĐT/avatar; admin quản lý (khóa/mở khóa, thêm).
+    // Cho phép đọc hồ sơ của chính mình kể cả khi bị khóa (để app biết và đăng xuất).
+    match /users/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isActive();
+      allow update: if isAdmin()
+        || (isActive() && request.auth.uid == uid && onlyChanges(['name', 'phone', 'avt_url']));
+      allow create, delete: if isAdmin();
+    }
+
+    // Collection dành cho bán online (chưa triển khai): chặn mặc định.
+    match /chats/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

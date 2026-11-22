@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../config/env_config.dart';
+import '../../core/firestore_paths.dart';
+import '../../models/product.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
+import '../../widgets/price_inputs.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -18,7 +21,7 @@ class AddProductScreen extends StatefulWidget {
 
 class _AddProductScreenState extends State<AddProductScreen> {
   final _nameController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _price = PriceFormController();
   final _categoryController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
@@ -29,7 +32,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _priceController.dispose();
+    _price.dispose();
     _categoryController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -45,13 +48,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _submitProduct() async {
     final name = _nameController.text.trim();
-    final priceText = _priceController.text.trim();
     final category = _categoryController.text.trim();
     final description = _descriptionController.text.trim();
-    final price = double.tryParse(priceText);
+    final prices = _price.build();
 
     if (name.isEmpty ||
-        price == null ||
+        prices == null ||
         category.isEmpty ||
         description.isEmpty ||
         _pickedImage == null) {
@@ -70,14 +72,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
         folder: EnvConfig.cloudinaryFolderProducts,
       );
 
-      final docRef = FirebaseFirestore.instance.collection('sanPham').doc();
-      await docRef.set({
-        'id': docRef.id,
-        'name': name,
-        'price': price,
-        'description': description,
-        'category': category,
-        'imageUrl': imageUrl,
+      await FirebaseFirestore.instance.collection(FsCollections.products).add({
+        ...Product(
+          name: name,
+          category: category,
+          description: description,
+          imageUrl: imageUrl,
+          prices: prices,
+        ).toMap(),
+        'created_at': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
@@ -180,18 +183,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 hintText: 'Nhập tên sản phẩm',
               ),
               const SizedBox(height: 16),
-              MeowFormField(
-                label: 'GIÁ *',
-                controller: _priceController,
-                hintText: 'Nhập giá bán (VNĐ)',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
+              PriceInputs(controller: _price),
               const SizedBox(height: 16),
               MeowFormField(
                 label: 'DANH MỤC *',
                 controller: _categoryController,
-                hintText: 'Trà Hoa Quả, Trà Sữa, Sữa...',
+                hintText: 'Cà phê, Trà, Bánh...',
               ),
               const SizedBox(height: 16),
               MeowFormField(

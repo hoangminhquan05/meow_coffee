@@ -5,55 +5,68 @@ import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/add_to_cart_sheet.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/meow_ui.dart';
 
+/// Giỏ hàng (L2): sửa số lượng, size, ghi chú; xóa dòng / xóa hết.
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
+
+  Future<void> _confirmClear(BuildContext context) async {
+    final cart = context.read<CartProvider>();
+    final ok = await showMeowConfirmDialog(
+      context,
+      title: 'Xóa hết giỏ hàng?',
+      message: 'Tất cả món đã chọn sẽ bị xóa khỏi giỏ.',
+      confirmLabel: 'Xóa hết',
+    );
+    if (ok) cart.clear();
+  }
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
-    final itemCount = cart.cartItems.fold<int>(0, (s, i) => s + i.quantity);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: MeowHeader(
         title: 'Giỏ Hàng',
         showBack: false,
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.soft,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            '$itemCount món được chọn',
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ink,
-            ),
-          ),
-        ),
+        trailing: cart.isEmpty
+            ? null
+            : MeowCircleIconButton(
+                icon: Icons.delete_sweep_outlined,
+                iconColor: AppColors.danger,
+                onTap: () => _confirmClear(context),
+              ),
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (cart.cartItems.isNotEmpty) _CheckoutBar(cart: cart),
+          if (!cart.isEmpty) _CheckoutBar(cart: cart),
           const BottomNavBar(currentIndex: 2),
         ],
       ),
-      body: cart.cartItems.isEmpty
+      body: cart.isEmpty
           ? const _EmptyCartPlaceholder()
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               children: [
-                for (var i = 0; i < cart.cartItems.length; i++) ...[
-                  _CartItemCard(item: cart.cartItems[i]),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    '${cart.totalItems} món · chạm vào món để sửa size / ghi chú',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ),
+                for (final item in cart.items) ...[
+                  _CartItemCard(item: item),
                   const SizedBox(height: 14),
                 ],
-                _OrderSummaryCard(totalPrice: cart.totalPrice),
               ],
             ),
     );
@@ -86,7 +99,7 @@ class _EmptyCartPlaceholder extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Giỏ hàng của bạn đang trống',
+              'Giỏ hàng đang trống',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 17,
@@ -96,101 +109,21 @@ class _EmptyCartPlaceholder extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Hãy thêm sản phẩm bạn yêu thích vào giỏ hàng',
+              'Chọn món cho khách để bắt đầu đơn mới',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13.5,
-                color: AppColors.muted,
-              ),
+              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
             ),
             const SizedBox(height: 22),
             SizedBox(
               width: 200,
               child: MeowSecondaryButton(
-                label: 'Khám phá thực đơn',
+                label: 'Chọn món',
                 onPressed: () =>
                     Navigator.pushReplacementNamed(context, '/product'),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _OrderSummaryCard extends StatelessWidget {
-  final double totalPrice;
-
-  const _OrderSummaryCard({required this.totalPrice});
-
-  @override
-  Widget build(BuildContext context) {
-    return MeowCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Tạm tính',
-                style: TextStyle(fontSize: 13, color: AppColors.muted),
-              ),
-              Text(
-                formatVnd(totalPrice, suffix: 'đ'),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.inkSlate,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Phí giao hàng',
-                style: TextStyle(fontSize: 13, color: AppColors.muted),
-              ),
-              Text(
-                'MIỄN PHÍ',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.success,
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Tổng cộng',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
-              ),
-              Text(
-                formatVnd(totalPrice, suffix: 'đ'),
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.brand,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -216,11 +149,11 @@ class _CheckoutBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Tổng cộng',
+                'Tạm tính',
                 style: TextStyle(fontSize: 11.5, color: AppColors.muted),
               ),
               Text(
-                formatVnd(cart.totalPrice, suffix: 'đ'),
+                formatMoney(cart.subtotal),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -232,8 +165,8 @@ class _CheckoutBar extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             child: MeowPrimaryButton(
-              label: 'Thanh Toán',
-              icon: Icons.payment_rounded,
+              label: 'Tiếp tục',
+              icon: Icons.arrow_forward_rounded,
               height: 48,
               onPressed: () => Navigator.pushNamed(context, '/payment'),
             ),
@@ -249,18 +182,34 @@ class _CartItemCard extends StatelessWidget {
 
   const _CartItemCard({required this.item});
 
+  Future<void> _decrease(BuildContext context) async {
+    final cart = context.read<CartProvider>();
+    if (item.quantity > 1) {
+      cart.decrease(item.key);
+      return;
+    }
+    final ok = await showMeowConfirmDialog(
+      context,
+      title: 'Xóa món?',
+      message: 'Xóa ${item.displayName} khỏi giỏ hàng?',
+      confirmLabel: 'Xóa',
+    );
+    if (ok) cart.remove(item.key);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = context.read<CartProvider>();
-    final priceNumber = formatVnd(item.product.price, suffix: '').trim();
 
     return MeowCard(
       padding: const EdgeInsets.all(14),
+      onTap: () => showEditCartItemSheet(context, item),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 80,
-            height: 80,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
               color: AppColors.bg,
               borderRadius: BorderRadius.circular(16),
@@ -287,7 +236,7 @@ class _CartItemCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        item.product.name,
+                        item.displayName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -300,7 +249,7 @@ class _CartItemCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     InkWell(
                       borderRadius: BorderRadius.circular(8),
-                      onTap: () => cart.removeFromCart(item.product),
+                      onTap: () => cart.remove(item.key),
                       child: const Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(
@@ -312,30 +261,32 @@ class _CartItemCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                if (item.note.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Ghi chú: ${item.note}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  '${formatMoney(item.unitPrice)} / món',
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '$priceNumber ',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.brand,
-                            ),
-                          ),
-                          const TextSpan(
-                            text: 'VNĐ',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.brand,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      formatMoney(item.lineTotal),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.brand,
                       ),
                     ),
                     Container(
@@ -353,15 +304,15 @@ class _CartItemCard extends StatelessWidget {
                           _QtyPillButton(
                             icon: Icons.remove_rounded,
                             filled: false,
-                            onTap: () => cart.decreaseQuantity(item.product),
+                            onTap: () => _decrease(context),
                           ),
                           SizedBox(
-                            width: 24,
+                            width: 28,
                             child: Text(
                               '${item.quantity}',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                fontSize: 12.5,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.inkSlate,
                               ),
@@ -370,7 +321,7 @@ class _CartItemCard extends StatelessWidget {
                           _QtyPillButton(
                             icon: Icons.add_rounded,
                             filled: true,
-                            onTap: () => cart.increaseQuantity(item.product),
+                            onTap: () => cart.increase(item.key),
                           ),
                         ],
                       ),
@@ -381,6 +332,92 @@ class _CartItemCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Sửa size / ghi chú / số lượng của một dòng trong giỏ.
+Future<void> showEditCartItemSheet(BuildContext context, CartItem item) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => _EditCartItemSheet(item: item),
+  );
+}
+
+class _EditCartItemSheet extends StatefulWidget {
+  final CartItem item;
+
+  const _EditCartItemSheet({required this.item});
+
+  @override
+  State<_EditCartItemSheet> createState() => _EditCartItemSheetState();
+}
+
+class _EditCartItemSheetState extends State<_EditCartItemSheet> {
+  late final _noteController = TextEditingController(text: widget.item.note);
+  late String _size = widget.item.size;
+  late int _quantity = widget.item.quantity;
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.item.product;
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                product.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              SizeQuantityNoteForm(
+                product: product,
+                size: _size,
+                quantity: _quantity,
+                noteController: _noteController,
+                onSizeChanged: (s) => setState(() => _size = s),
+                onQuantityChanged: (q) => setState(() => _quantity = q),
+              ),
+              const SizedBox(height: 20),
+              MeowPrimaryButton(
+                label:
+                    'CẬP NHẬT • ${formatMoney(product.priceOf(_size) * _quantity)}',
+                height: 50,
+                onPressed: () {
+                  context.read<CartProvider>().updateItem(
+                        widget.item.key,
+                        size: _size,
+                        note: _noteController.text,
+                        quantity: _quantity,
+                      );
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -406,11 +443,11 @@ class _QtyPillButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 26,
-          height: 26,
+          width: 28,
+          height: 28,
           child: Icon(
             icon,
-            size: 14,
+            size: 15,
             color: filled ? Colors.white : AppColors.ink,
           ),
         ),

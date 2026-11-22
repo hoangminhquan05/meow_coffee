@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
+import '../../core/firestore_paths.dart';
 import '../../models/banner_model.dart';
 import '../../models/product.dart';
-import '../../providers/cart_provider.dart';
+import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/add_to_cart_sheet.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,69 +20,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Product> _products = [];
-  bool _isLoadingProducts = true;
-
-  static const List<({String category, String eyebrow, String title})>
-      _categoryConfigs = [
-    (
-      category: 'Trà Hoa Quả',
-      eyebrow: 'TƯƠI MÁT MỖI NGÀY',
-      title: 'Trà hoa quả',
-    ),
-    (
-      category: 'Trà Sữa',
-      eyebrow: 'TRÀ SỮA & MÓN NGỌT',
-      title: 'Trà sữa',
-    ),
-    (
-      category: 'Sữa',
-      eyebrow: 'BÉO NGẬY THƠM NGON',
-      title: 'Sữa tươi',
-    ),
-    (
-      category: 'Sữa Chua',
-      eyebrow: 'THANH MÁT TỐT CHO SỨC KHỎE',
-      title: 'Sữa chua',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProducts();
-  }
-
-  Future<void> _loadProducts() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('sanPham').get();
-      if (!mounted) return;
-      setState(() {
-        _products = snapshot.docs
-            .map((doc) => Product.fromMap(doc.data(), docId: doc.id))
-            .toList();
-        _isLoadingProducts = false;
-      });
-    } catch (e) {
-      debugPrint('HomeScreen._loadProducts error: $e');
-      if (mounted) {
-        setState(() => _isLoadingProducts = false);
-      }
-    }
-  }
-
-  void _quickAddToCart(Product product) {
-    context.read<CartProvider>().addToCart(product);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Đã thêm ${product.name} vào giỏ hàng'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-  }
+  // Realtime: món bị đánh dấu hết hàng ở máy khác hiện ngay (L10).
+  late final Stream<List<Product>> _productsStream = ProductService.watchAll();
 
   @override
   Widget build(BuildContext context) {
@@ -89,53 +29,70 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.bg,
       bottomNavigationBar: const BottomNavBar(currentIndex: 0),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.brand,
-          onRefresh: _loadProducts,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _HomeTopBar(),
-                const SizedBox(height: 12),
-                const _BannerSection(),
-                const SizedBox(height: 24),
-                if (_isLoadingProducts)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(color: AppColors.brand),
-                    ),
-                  )
-                else if (_products.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text(
-                      'Hiện chưa có sản phẩm nào',
-                      style: TextStyle(fontSize: 14, color: AppColors.muted),
-                    ),
-                  )
-                else ...[
-                  _CategorySection(
-                    eyebrow: 'BESTSELLERS',
-                    title: 'Được yêu thích',
-                    products: _products,
-                    onQuickAdd: _quickAddToCart,
-                  ),
-                  for (final cfg in _categoryConfigs)
-                    _CategorySection(
-                      eyebrow: cfg.eyebrow,
-                      title: cfg.title,
-                      products: _products
-                          .where((p) => p.category == cfg.category)
-                          .toList(),
-                      onQuickAdd: _quickAddToCart,
-                    ),
-                ],
-              ],
-            ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _HomeTopBar(),
+              const SizedBox(height: 12),
+              const _BannerSection(),
+              const SizedBox(height: 24),
+              StreamBuilder<List<Product>>(
+                stream: _productsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        'Lỗi tải sản phẩm: ${snapshot.error}',
+                        style: const TextStyle(color: AppColors.danger),
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
+                        child:
+                            CircularProgressIndicator(color: AppColors.brand),
+                      ),
+                    );
+                  }
+                  final products = snapshot.data!;
+                  if (products.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        'Hiện chưa có sản phẩm nào',
+                        style: TextStyle(fontSize: 14, color: AppColors.muted),
+                      ),
+                    );
+                  }
+                  // Mỗi danh mục một hàng, theo dữ liệu thực tế.
+                  final categories = <String>[];
+                  for (final p in products) {
+                    final c = p.category.isEmpty ? 'Khác' : p.category;
+                    if (!categories.contains(c)) categories.add(c);
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final c in categories)
+                        _CategorySection(
+                          eyebrow: 'DANH MỤC',
+                          title: c,
+                          products: products
+                              .where((p) =>
+                                  (p.category.isEmpty ? 'Khác' : p.category) ==
+                                  c)
+                              .toList(),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -249,12 +206,15 @@ class _BannerSectionState extends State<_BannerSection> {
 
   Future<void> _loadBanners() async {
     try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('banner').get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection(FsCollections.banners)
+          .get();
       if (!mounted) return;
       final loaded = snapshot.docs
-          .map((doc) => BannerModel.fromMap(doc.data(), docId: doc.id))
-          .toList();
+          .map((doc) => BannerModel.fromMap(doc.data(), id: doc.id))
+          .where((b) => b.isActive && b.bannerUrl.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
       setState(() => _banners = loaded);
 
       if (loaded.length > 1) {
@@ -392,13 +352,11 @@ class _CategorySection extends StatelessWidget {
   final String eyebrow;
   final String title;
   final List<Product> products;
-  final ValueChanged<Product> onQuickAdd;
 
   const _CategorySection({
     required this.eyebrow,
     required this.title,
     required this.products,
-    required this.onQuickAdd,
   });
 
   @override
@@ -464,10 +422,7 @@ class _CategorySection extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final product = products[index];
-                return _ProductItemCard(
-                  product: product,
-                  onQuickAdd: () => onQuickAdd(product),
-                );
+                return _ProductItemCard(product: product);
               },
             ),
           ),
@@ -479,16 +434,15 @@ class _CategorySection extends StatelessWidget {
 
 class _ProductItemCard extends StatelessWidget {
   final Product product;
-  final VoidCallback onQuickAdd;
 
-  const _ProductItemCard({
-    required this.product,
-    required this.onQuickAdd,
-  });
+  const _ProductItemCard({required this.product});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final soldOut = !product.isAvailable;
+    return Opacity(
+      opacity: soldOut ? 0.55 : 1,
+      child: Container(
       width: 158,
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -507,6 +461,8 @@ class _ProductItemCard extends StatelessWidget {
               arguments: product.id,
             );
           },
+          // Nhấn giữ → đánh dấu hết hàng / bán lại (L10).
+          onLongPress: () => showAvailabilitySheet(context, product),
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Column(
@@ -557,7 +513,7 @@ class _ProductItemCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  product.formattedPrice,
+                  product.priceLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -571,18 +527,22 @@ class _ProductItemCard extends StatelessWidget {
                   width: double.infinity,
                   height: 32,
                   child: Material(
-                    color: AppColors.soft,
+                    color: soldOut ? AppColors.dangerSoft : AppColors.soft,
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: onQuickAdd,
-                      child: const Center(
+                      // "+" mở bảng chọn size (Q11), không thêm thẳng.
+                      onTap: soldOut
+                          ? null
+                          : () => showAddToCartSheet(context, product),
+                      child: Center(
                         child: Text(
-                          '+ Thêm',
+                          soldOut ? 'Hết hàng' : '+ Thêm',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.brand,
+                            color:
+                                soldOut ? AppColors.danger : AppColors.brand,
                           ),
                         ),
                       ),
@@ -593,6 +553,7 @@ class _ProductItemCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

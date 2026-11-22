@@ -1,51 +1,38 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../core/enums.dart';
+
+/// Bàn trong `tables/{id}`. Trạng thái do nhân viên bấm thủ công.
 class TableModel {
-  final String idBan;
-  final String soBan;
-  final int choNgoi;
-  final String trangThai;
+  final String id;
+  final int tableNumber;
+  final int seats;
+  final TableStatus status;
+  final DateTime? updatedAt;
 
   const TableModel({
-    this.idBan = '',
-    this.soBan = '',
-    this.choNgoi = 0,
-    this.trangThai = 'Trống',
+    this.id = '',
+    this.tableNumber = 0,
+    this.seats = 0,
+    this.status = TableStatus.available,
+    this.updatedAt,
   });
 
-  factory TableModel.fromMap(Map<String, dynamic> map, {String? docId}) {
-    final rawSeats = map['cho_ngoi'];
-    final int parsedSeats = rawSeats is num
-        ? rawSeats.toInt()
-        : int.tryParse(rawSeats?.toString() ?? '') ?? 0;
+  String get displayName => 'Bàn $tableNumber';
 
-    final rawId = map['id_ban']?.toString() ?? '';
+  factory TableModel.fromMap(Map<String, dynamic> map, {required String id}) {
+    int toInt(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
+    final updated = map['updated_at'];
     return TableModel(
-      idBan: rawId.isNotEmpty ? rawId : (docId ?? ''),
-      soBan: map['so_ban']?.toString() ?? '',
-      choNgoi: parsedSeats,
-      trangThai: map['trang_thai']?.toString() ?? 'Trống',
+      id: id,
+      tableNumber: toInt(map['table_number']),
+      seats: toInt(map['seats']),
+      status: TableStatus.fromValue(map['status'] as String?),
+      updatedAt: updated is Timestamp ? updated.toDate() : null,
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id_ban': idBan,
-      'so_ban': soBan,
-      'cho_ngoi': choNgoi,
-      'trang_thai': trangThai,
-    };
-  }
-
-  TableModel copyWith({
-    String? idBan,
-    String? soBan,
-    int? choNgoi,
-    String? trangThai,
-  }) {
-    return TableModel(
-      idBan: idBan ?? this.idBan,
-      soBan: soBan ?? this.soBan,
-      choNgoi: choNgoi ?? this.choNgoi,
-      trangThai: trangThai ?? this.trangThai,
-    );
-  }
+  factory TableModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      TableModel.fromMap(doc.data() ?? const {}, id: doc.id);
 }

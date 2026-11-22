@@ -4,13 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../config/env_config.dart';
+import '../core/firestore_paths.dart';
 import '../models/banner_model.dart';
 import '../services/cloudinary_service.dart';
 
 class BannerProvider extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   CollectionReference<Map<String, dynamic>> get _bannersCollection =>
-      _db.collection('banner');
+      _db.collection(FsCollections.banners);
 
   List<BannerModel> _banners = [];
   List<BannerModel> get banners => List.unmodifiable(_banners);
@@ -34,8 +35,9 @@ class BannerProvider extends ChangeNotifier {
     try {
       final snapshot = await _bannersCollection.get();
       _banners = snapshot.docs
-          .map((doc) => BannerModel.fromMap(doc.data(), docId: doc.id))
-          .toList();
+          .map((doc) => BannerModel.fromMap(doc.data(), id: doc.id))
+          .toList()
+        ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
     } catch (e) {
       debugPrint('BannerProvider.loadBanners error: $e');
     } finally {
@@ -71,9 +73,15 @@ class BannerProvider extends ChangeNotifier {
   }
 
   Future<void> addBanner(BannerModel banner) async {
-    final docRef = await _bannersCollection.add(banner.toMap());
-    final bannerWithId = banner.copyWith(id: docRef.id);
-    await docRef.set(bannerWithId.toMap());
+    // Banner mới xếp cuối danh sách.
+    final nextOrder = _banners.isEmpty
+        ? 1
+        : _banners.map((b) => b.displayOrder).reduce((a, b) => a > b ? a : b) +
+            1;
+    await _bannersCollection.add({
+      ...banner.copyWith(displayOrder: nextOrder).toMap(),
+      'created_at': FieldValue.serverTimestamp(),
+    });
     await loadBanners();
   }
 
@@ -82,10 +90,10 @@ class BannerProvider extends ChangeNotifier {
 
     final oldDoc = await _bannersCollection.doc(banner.id).get();
     final oldBanner = oldDoc.exists && oldDoc.data() != null
-        ? BannerModel.fromMap(oldDoc.data()!, docId: oldDoc.id)
+        ? BannerModel.fromMap(oldDoc.data()!, id: oldDoc.id)
         : null;
 
-    await _bannersCollection.doc(banner.id).set(banner.toMap());
+    await _bannersCollection.doc(banner.id).update(banner.toMap());
 
     if (oldBanner != null &&
         oldBanner.bannerUrl.isNotEmpty &&
@@ -100,7 +108,7 @@ class BannerProvider extends ChangeNotifier {
     final docSnapshot = await _bannersCollection.doc(bannerId).get();
     if (!docSnapshot.exists || docSnapshot.data() == null) return;
 
-    final banner = BannerModel.fromMap(docSnapshot.data()!, docId: docSnapshot.id);
+    final banner = BannerModel.fromMap(docSnapshot.data()!, id: docSnapshot.id);
     await _bannersCollection.doc(bannerId).delete();
 
     if (banner.bannerUrl.isNotEmpty) {

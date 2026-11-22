@@ -1,8 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/enums.dart';
+import '../../core/firestore_paths.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
@@ -41,49 +42,15 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
 
     try {
-      final usersCol = FirebaseFirestore.instance.collection('uSer');
-      final currentUser = FirebaseAuth.instance.currentUser;
-      UserModel? loaded;
-
-      final doc = await usersCol.doc(uid).get();
-      if (doc.exists && doc.data() != null) {
-        loaded = UserModel.fromMap(doc.data()!, docId: doc.id);
-      } else {
-        final byUid =
-            await usersCol.where('uid', isEqualTo: uid).limit(1).get();
-        if (byUid.docs.isNotEmpty) {
-          final d = byUid.docs.first;
-          loaded = UserModel.fromMap(d.data(), docId: d.id);
-        } else if (currentUser?.email != null &&
-            currentUser!.email!.isNotEmpty) {
-          final byEmail = await usersCol
-              .where('email', isEqualTo: currentUser.email)
-              .limit(1)
-              .get();
-          if (byEmail.docs.isNotEmpty) {
-            final d = byEmail.docs.first;
-            loaded = UserModel.fromMap(d.data(), docId: d.id);
-          }
-        }
-      }
+      final doc = await FirebaseFirestore.instance
+          .collection(FsCollections.users)
+          .doc(uid)
+          .get();
 
       if (!mounted) return;
-      if (loaded != null) {
+      if (doc.exists) {
         setState(() {
-          _user = loaded;
-          _errorMessage = null;
-          _isLoading = false;
-        });
-      } else if (currentUser != null && currentUser.uid == uid) {
-        setState(() {
-          _user = UserModel(
-            uid: uid,
-            avtUrl: currentUser.photoURL ?? '',
-            email: currentUser.email ?? '',
-            name: currentUser.displayName ?? '',
-            role: 'Nhân Viên',
-            soDienThoai: '',
-          );
+          _user = UserModel.fromDoc(doc);
           _errorMessage = null;
           _isLoading = false;
         });
@@ -102,16 +69,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
   }
 
-  String _formatRole(String role) {
-    switch (role) {
-      case 'Nhân Viên':
-        return 'Nhân viên';
-      case 'ADMIN':
-        return 'Quản lý';
-      default:
-        return role.isNotEmpty ? role : 'Không xác định';
-    }
-  }
+  String _formatRole(UserRole role) => role.label;
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -277,8 +235,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                             _InfoFieldCard(
                               icon: Icons.phone_outlined,
                               label: 'SỐ ĐIỆN THOẠI',
-                              value: _user!.soDienThoai.isNotEmpty
-                                  ? _user!.soDienThoai
+                              value: _user!.phone.isNotEmpty
+                                  ? _user!.phone
                                   : 'Không có số điện thoại',
                             ),
                             const SizedBox(height: 12),

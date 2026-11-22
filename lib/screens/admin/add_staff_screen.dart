@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/env_config.dart';
+import '../../core/enums.dart';
+import '../../core/firestore_paths.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
@@ -21,7 +23,6 @@ class AddStaffScreen extends StatefulWidget {
 
 class _AddStaffScreenState extends State<AddStaffScreen> {
   final _nameController = TextEditingController();
-  final _roleController = TextEditingController(text: 'Nhân Viên');
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
 
@@ -31,7 +32,6 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _roleController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
@@ -89,11 +89,10 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
-    final role = _roleController.text.trim();
     final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
 
-    if (name.isEmpty || role.isEmpty || phone.isEmpty || email.isEmpty) {
+    if (name.isEmpty || phone.isEmpty || email.isEmpty) {
       setState(() => _errorMessage = 'Vui lòng điền đầy đủ thông tin');
       return;
     }
@@ -124,17 +123,16 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
 
       final user = UserModel(
         uid: uid,
-        avtUrl: '',
         email: email,
         name: name,
-        role: role,
-        soDienThoai: phone,
+        role: UserRole.staff,
+        phone: phone,
       );
 
       await FirebaseFirestore.instance
-          .collection('uSer')
+          .collection(FsCollections.users)
           .doc(uid)
-          .set(user.toMap());
+          .set({...user.toMap(), 'created_at': FieldValue.serverTimestamp()});
 
       try {
         await _sendWelcomeEmail(
@@ -197,12 +195,6 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
                 label: 'TÊN NHÂN VIÊN',
                 controller: _nameController,
                 hintText: 'Nhập họ và tên nhân viên',
-              ),
-              const SizedBox(height: 16),
-              MeowFormField(
-                label: 'CHỨC VỤ',
-                controller: _roleController,
-                hintText: 'Nhân Viên',
               ),
               const SizedBox(height: 16),
               MeowFormField(
