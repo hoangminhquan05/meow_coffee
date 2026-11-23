@@ -185,125 +185,111 @@ class _BannerSection extends StatefulWidget {
   State<_BannerSection> createState() => _BannerSectionState();
 }
 
+/// Banner Trang chủ: đọc realtime `banners` (đang hiện, có ảnh, theo display_order).
+/// Đang tải → khung xám loading; không có banner hoặc lỗi → ảnh tĩnh banner.jpg.
 class _BannerSectionState extends State<_BannerSection> {
+  static const _height = 184.0;
+
   final PageController _pageController = PageController(viewportFraction: 0.90);
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
   List<BannerModel> _banners = [];
+  bool _isLoading = true;
   Timer? _autoScrollTimer;
   int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadBanners();
+    _sub = FirebaseFirestore.instance
+        .collection(FsCollections.banners)
+        .snapshots()
+        .listen(_onSnapshot, onError: (Object e) {
+      debugPrint('_BannerSection banners stream error: $e');
+      if (!mounted) return;
+      setState(() {
+        _banners = [];
+        _isLoading = false;
+      });
+      _restartAutoScroll();
+    });
+  }
+
+  void _onSnapshot(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    if (!mounted) return;
+    final loaded = snapshot.docs
+        .map((doc) => BannerModel.fromMap(doc.data(), id: doc.id))
+        .where((b) => b.isActive && b.bannerUrl.isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+    setState(() {
+      _banners = loaded;
+      _isLoading = false;
+      // Danh sách ngắn lại (admin ẩn banner) → về trang đầu.
+      if (_currentPage >= loaded.length) {
+        _currentPage = 0;
+        if (_pageController.hasClients) _pageController.jumpToPage(0);
+      }
+    });
+    _restartAutoScroll();
+  }
+
+  void _restartAutoScroll() {
+    _autoScrollTimer?.cancel();
+    if (_banners.length <= 1) return;
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || !_pageController.hasClients || _banners.isEmpty) return;
+      _currentPage = (_currentPage + 1) % _banners.length;
+      _pageController.animateToPage(
+        _currentPage,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   @override
   void dispose() {
+    _sub?.cancel();
     _autoScrollTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadBanners() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection(FsCollections.banners)
-          .get();
-      if (!mounted) return;
-      final loaded = snapshot.docs
-          .map((doc) => BannerModel.fromMap(doc.data(), id: doc.id))
-          .where((b) => b.isActive && b.bannerUrl.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
-      setState(() => _banners = loaded);
-
-      if (loaded.length > 1) {
-        _autoScrollTimer?.cancel();
-        _autoScrollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-          if (!mounted || !_pageController.hasClients) return;
-          _currentPage = (_currentPage + 1) % _banners.length;
-          _pageController.animateToPage(
-            _currentPage,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOut,
-          );
-        });
-      }
-    } catch (e) {
-      debugPrint('_BannerSection._loadBanners error: $e');
-    }
+  Widget _frame({required Widget child, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        height: _height,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: AppColors.cardShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_banners.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          height: 184,
-          decoration: BoxDecoration(
-            color: AppColors.storyBg,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: AppColors.cardShadow,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: [
-              Expanded(
-                flex: 11,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 12, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'MEOW MOMENTS',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.storyGold,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const Text(
-                        'Thêm vị ngon,\nthêm niềm vui.',
-                        style: TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.35,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pushReplacementNamed(
-                          context,
-                          '/product',
-                        ),
-                        child: const Text(
-                          'Chọn món yêu thích',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.storyGold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 9,
-                child: Image.asset(
-                  'assets/images/banner.jpg',
-                  height: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ],
+    if (_isLoading) {
+      return _frame(
+        color: AppColors.soft,
+        child: const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.brand,
+            strokeWidth: 2,
           ),
         ),
+      );
+    }
+
+    if (_banners.isEmpty) {
+      // Không có banner đang hiện (hoặc lỗi tải): ảnh tĩnh dự phòng.
+      return _frame(
+        child: Image.asset('assets/images/banner.jpg', fit: BoxFit.cover),
       );
     }
 

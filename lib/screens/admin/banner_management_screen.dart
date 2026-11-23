@@ -48,6 +48,69 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     }
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _toggleActive(BannerModel banner, bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<BannerProvider>().setActive(banner.id, value);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(value
+              ? 'Đã hiện “${banner.name}” ở Trang chủ'
+              : 'Đã ẩn “${banner.name}” khỏi Trang chủ'),
+          duration: const Duration(seconds: 2),
+        ));
+    } catch (e) {
+      _showError('Không cập nhật được banner: $e');
+    }
+  }
+
+  /// `onReorderItem` đã chỉnh sẵn newIndex sau khi bỏ phần tử ở oldIndex.
+  Future<void> _reorder(int oldIndex, int newIndex) async {
+    try {
+      await context.read<BannerProvider>().reorder(oldIndex, newIndex);
+    } catch (e) {
+      _showError('Không lưu được thứ tự banner: $e');
+    }
+  }
+
+  Widget _buildHeader(BannerProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const MeowEditorialHero(
+          eyebrow: 'MEOW COFFEE',
+          title: 'Quản lý banner',
+          subtitle:
+              'Gạt công tắc để hiện/ẩn. Nhấn giữ thẻ rồi kéo để đổi thứ tự trên Trang chủ.',
+        ),
+        const SizedBox(height: 16),
+        MeowPrimaryButton(
+          label: 'Thêm banner mới',
+          icon: Icons.add_photo_alternate_outlined,
+          height: 50,
+          onPressed: () => _openBannerDialog(),
+        ),
+        const SizedBox(height: 18),
+        if (provider.banners.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 36),
+            child: Center(
+              child: Text(
+                'Chưa có banner nào',
+                style: TextStyle(color: AppColors.muted),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BannerProvider>();
@@ -72,43 +135,37 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
                 : RefreshIndicator(
                     color: AppColors.brand,
                     onRefresh: () => provider.loadBanners(),
-                    child: ListView(
+                    child: ReorderableListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                      children: [
-                        const MeowEditorialHero(
-                          eyebrow: 'MEOW COFFEE',
-                          title: 'Quản lý banner',
-                          subtitle:
-                              'Chọn banner để chỉnh sửa hoặc thêm hình ảnh quảng bá mới.',
-                        ),
-                        const SizedBox(height: 16),
-                        MeowPrimaryButton(
-                          label: 'Thêm banner mới',
-                          icon: Icons.add_photo_alternate_outlined,
-                          height: 50,
-                          onPressed: () => _openBannerDialog(),
-                        ),
-                        const SizedBox(height: 18),
-                        if (provider.banners.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 36),
-                            child: Center(
-                              child: Text(
-                                'Chưa có banner nào',
-                                style: TextStyle(color: AppColors.muted),
-                              ),
-                            ),
-                          )
-                        else
-                          for (final banner in provider.banners) ...[
-                            _BannerItemCard(
+                      header: _buildHeader(provider),
+                      // Kéo bằng cách nhấn giữ cả thẻ, không dùng tay cầm mặc định.
+                      buildDefaultDragHandles: false,
+                      itemCount: provider.banners.length,
+                      onReorderItem: _reorder,
+                      itemBuilder: (context, index) {
+                        final banner = provider.banners[index];
+                        // Số thứ tự chỉ đếm banner đang hiện (= thứ tự ở Trang chủ).
+                        final position = banner.isActive
+                            ? provider.banners
+                                    .take(index + 1)
+                                    .where((b) => b.isActive)
+                                    .length
+                            : null;
+                        return ReorderableDelayedDragStartListener(
+                          key: ValueKey(banner.id),
+                          index: index,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: _BannerItemCard(
                               banner: banner,
+                              position: position,
                               isSelected: selected?.id == banner.id,
                               onTap: () => provider.selectBanner(banner),
+                              onActiveChanged: (v) => _toggleActive(banner, v),
                             ),
-                            const SizedBox(height: 14),
-                          ],
-                      ],
+                          ),
+                        );
+                      },
                     ),
                   ),
           ),
@@ -177,75 +234,105 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   }
 }
 
+/// Tỉ lệ ảnh banner ở Trang chủ (rộng ~90% màn hình, cao 184px) ≈ 1.85 : 1.
+const double _homeBannerAspectRatio = 1.85;
+
 class _BannerItemCard extends StatelessWidget {
   final BannerModel banner;
+
+  /// Số thứ tự trong các banner đang hiện; null nếu banner đang ẩn.
+  final int? position;
   final bool isSelected;
   final VoidCallback onTap;
+  final ValueChanged<bool> onActiveChanged;
 
   const _BannerItemCard({
     required this.banner,
+    required this.position,
     required this.isSelected,
     required this.onTap,
+    required this.onActiveChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final active = banner.isActive;
     return MeowCard(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 14),
       borderColor: isSelected ? AppColors.brand : AppColors.border,
       borderWidth: isSelected ? 2 : 1,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 164,
-            child: CachedNetworkImage(
-              imageUrl: banner.bannerUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, _) => Container(color: AppColors.soft),
-              errorWidget: (_, _, _) => Image.asset(
-                'assets/images/banner.jpg',
-                fit: BoxFit.cover,
+          // Hàng trên: tên bên trái, trạng thái + công tắc bên phải.
+          Row(
+            children: [
+              const Icon(
+                Icons.drag_indicator_rounded,
+                size: 18,
+                color: AppColors.mutedLight,
               ),
-            ),
+              const SizedBox(width: 4),
+              if (position != null) ...[
+                Text(
+                  '#$position',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.brand,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  banner.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: active ? AppColors.ink : AppColors.muted,
+                  ),
+                ),
+              ),
+              Text(
+                active ? 'Đang hiện' : 'Đang ẩn',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: active ? AppColors.success : AppColors.mutedLight,
+                ),
+              ),
+              Switch(
+                value: active,
+                onChanged: onActiveChanged,
+                activeThumbColor: AppColors.success,
+              ),
+            ],
           ),
+          const SizedBox(height: 6),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    banner.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
+            padding: const EdgeInsets.only(right: 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: _homeBannerAspectRatio,
+                child: Opacity(
+                  // Banner đang ẩn: làm mờ nhưng giữ đúng vị trí.
+                  opacity: active ? 1 : 0.4,
+                  child: CachedNetworkImage(
+                    imageUrl: banner.bannerUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, _) => Container(color: AppColors.soft),
+                    errorWidget: (_, _, _) => Image.asset(
+                      'assets/images/banner.jpg',
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
-                if (isSelected)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.soft,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Text(
-                      'Đang chọn',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.brand,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         ],
@@ -306,6 +393,13 @@ class _BannerDialogState extends State<_BannerDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _errorText = 'Vui lòng nhập tên banner');
+      return;
+    }
+    // Banner luôn phải có ảnh: thêm mới bắt buộc chọn ảnh.
+    final hasImage = _pickedImage != null ||
+        (widget.existing?.bannerUrl.isNotEmpty ?? false);
+    if (!hasImage) {
+      setState(() => _errorText = 'Vui lòng chọn ảnh banner');
       return;
     }
 
@@ -384,7 +478,9 @@ class _BannerDialogState extends State<_BannerDialog> {
                 )
               else
                 MeowSecondaryButton(
-                  label: _pickedImage != null ? 'Đổi ảnh khác' : 'Chọn ảnh mới',
+                  label: _pickedImage != null
+                      ? 'Đổi ảnh khác'
+                      : (existing == null ? 'Chọn ảnh banner *' : 'Chọn ảnh mới'),
                   icon: Icons.collections_outlined,
                   height: 46,
                   onPressed: _pickImage,

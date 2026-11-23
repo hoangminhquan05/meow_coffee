@@ -104,6 +104,47 @@ class BannerProvider extends ChangeNotifier {
     await loadBanners();
   }
 
+  /// Bật/tắt hiển thị banner ở Trang chủ. Cập nhật giao diện trước, lỗi thì hoàn lại.
+  Future<void> setActive(String bannerId, bool isActive) async {
+    final index = _banners.indexWhere((b) => b.id == bannerId);
+    if (index < 0) return;
+    final previous = _banners[index];
+    _banners[index] = previous.copyWith(isActive: isActive);
+    notifyListeners();
+    try {
+      await _bannersCollection.doc(bannerId).update({'is_active': isActive});
+    } catch (e) {
+      _banners[index] = previous;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Kéo thả đổi thứ tự: ghi lại `display_order` = vị trí (1, 2, 3…) cho mọi banner
+  /// trong một batch. Cập nhật giao diện trước, lỗi thì hoàn lại.
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    if (oldIndex == newIndex) return;
+    final previous = List<BannerModel>.of(_banners);
+    final moved = _banners.removeAt(oldIndex);
+    _banners.insert(newIndex, moved);
+    _banners = [
+      for (var i = 0; i < _banners.length; i++)
+        _banners[i].copyWith(displayOrder: i + 1),
+    ];
+    notifyListeners();
+    try {
+      final batch = _db.batch();
+      for (final b in _banners) {
+        batch.update(_bannersCollection.doc(b.id), {'display_order': b.displayOrder});
+      }
+      await batch.commit();
+    } catch (e) {
+      _banners = previous;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> deleteBanner(String bannerId) async {
     final docSnapshot = await _bannersCollection.doc(bannerId).get();
     if (!docSnapshot.exists || docSnapshot.data() == null) return;
