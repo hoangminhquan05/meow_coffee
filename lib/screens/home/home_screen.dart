@@ -436,9 +436,11 @@ class _ProductItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final soldOut = !product.isAvailable;
-    // Chỉ NV/admin được bán tại quầy và đánh dấu hết hàng.
+    // Chỉ NV/admin đánh dấu hết hàng; khách và NV/admin đều thêm vào giỏ
+    // (giỏ online / giỏ tại quầy); shipper chỉ xem.
     final canSell =
         context.select<SessionProvider, bool>((s) => !s.isCustomer && !s.isShipper);
+    final canAdd = context.select<SessionProvider, bool>((s) => !s.isShipper);
     void openDetail() =>
         Navigator.pushNamed(context, '/product_detail', arguments: product.id);
     return Opacity(
@@ -531,12 +533,12 @@ class _ProductItemCard extends StatelessWidget {
                       // Khách: tạm chỉ xem chi tiết (đặt online ở bước 5).
                       onTap: soldOut
                           ? null
-                          : canSell
+                          : canAdd
                               ? () => showAddToCartSheet(context, product)
                               : openDetail,
                       child: Center(
                         child: Text(
-                          soldOut ? 'Hết hàng' : (canSell ? '+ Thêm' : 'Xem món'),
+                          soldOut ? 'Hết hàng' : (canAdd ? '+ Thêm' : 'Xem món'),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

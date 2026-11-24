@@ -64,12 +64,19 @@ export interface FsDoc {
   id: string;
   name: string;
   data: Record<string, unknown>;
+  updateTime?: string;
 }
 
-export type FsWrite =
-  | { update: { name: string; fields: Record<string, FsValue> };
-      currentDocument?: { exists?: boolean; updateTime?: string };
-      updateTransforms?: { fieldPath: string; setToServerValue: 'REQUEST_TIME' }[] };
+export interface FsWrite {
+  update: { name: string; fields: Record<string, FsValue> };
+  /** Chỉ ghi các trường này (giữ nguyên phần còn lại của doc). */
+  updateMask?: { fieldPaths: string[] };
+  currentDocument?: { exists?: boolean; updateTime?: string };
+  updateTransforms?: (
+    | { fieldPath: string; setToServerValue: 'REQUEST_TIME' }
+    | { fieldPath: string; appendMissingElements: { values: FsValue[] } }
+  )[];
+}
 
 export class FirestoreError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
@@ -124,8 +131,14 @@ export class Firestore {
       const doc = (await this.call(`${this.base}/${path}${qs}`)) as {
         name: string;
         fields?: Record<string, FsValue>;
+        updateTime?: string;
       };
-      return { name: doc.name, id: doc.name.split('/').pop()!, data: decodeFields(doc.fields ?? {}) };
+      return {
+        name: doc.name,
+        id: doc.name.split('/').pop()!,
+        data: decodeFields(doc.fields ?? {}),
+        updateTime: doc.updateTime,
+      };
     } catch (e) {
       if (e instanceof FirestoreError && e.status === 404) return null;
       throw e;

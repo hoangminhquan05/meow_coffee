@@ -10,4 +10,5 @@ class FsCollections {
   static const orders = 'orders';
   static const counters = 'counters';
   static const settings = 'settings';
+  static const carts = 'carts';
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../config/env_config.dart';
 import '../../core/enums.dart';
 import '../../models/order.dart';
 import '../../models/table_model.dart';
@@ -15,6 +14,7 @@ import '../../services/order_service.dart';
 import '../../services/table_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../utils/vietqr.dart';
 import '../../widgets/meow_ui.dart';
 import '../../widgets/order_receipt.dart';
 
@@ -45,13 +45,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   String _newPaymentRef() =>
       'MEOW${DateFormat('ddMMyyHHmmss').format(DateTime.now())}';
 
-  String _buildVietQrUrl(int amount, String ref) {
-    final baseUrl = EnvConfig.vietQrApiBaseUrl.replaceAll(RegExp(r'/$'), '');
-    return '$baseUrl/${EnvConfig.vietQrBankBin}-${EnvConfig.vietQrAccountNumber}'
-        '-${EnvConfig.vietQrTemplateId}.jpg'
-        '?accountName=${Uri.encodeComponent(EnvConfig.vietQrAccountName)}'
-        '&amount=$amount&addInfo=${Uri.encodeComponent(ref)}';
-  }
+  String _buildVietQrUrl(int amount, String ref) =>
+      buildVietQrUrl(amount: amount, content: ref);
 
   // ---------------------------------------------------------------- Flow
 

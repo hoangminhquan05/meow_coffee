@@ -157,6 +157,16 @@ service cloud.firestore {
       allow create, update: if isActive() && request.auth.uid == uid && validAddress();
     }
 
+    // Giỏ hàng online của khách (đồng bộ giữa các thiết bị): chỉ chủ tài khoản.
+    // Chỉ lưu mã món/size/số lượng/ghi chú – giá do Worker tính khi đặt đơn.
+    match /carts/{uid} {
+      allow read, delete: if isActive() && request.auth.uid == uid;
+      allow create, update: if isActive() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['items', 'updated_at'])
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 30;
+    }
+
     // Collection dành cho bán online (chưa triển khai): chặn mặc định.
     match /chats/{document=**} {
       allow read, write: if false;

@@ -91,7 +91,7 @@ export function parseShopSettings(raw: Record<string, unknown> | null): ShopSett
       baseFee: Math.round(num(fee.base_fee, 15000)),
       perKm: Math.round(num(fee.per_km, 5000)),
     },
-    paymentTimeoutMin: Math.round(num(r.payment_timeout_min, 5)),
+    paymentTimeoutMin: Math.round(num(r.payment_timeout_min, 2)),
     requireShipperOnShift: bool(r.require_shipper_on_shift, false),
   };
 }

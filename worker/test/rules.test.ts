@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkClaims } from '../src/firebase/idToken';
+import { checkCustomerCancel } from '../src/orders/cancelOrder';
 import { decodeFields, encodeFields, Ts } from '../src/firebase/firestore';
 import { base64UrlDecode, base64UrlEncode } from '../src/firebase/jwt';
 import { haversineKm } from '../src/orders/distance';
@@ -157,6 +158,21 @@ describe('ID token claims', () => {
   });
   it('base64url round trip', () => {
     expect(new TextDecoder().decode(base64UrlDecode(base64UrlEncode('xin chào ~?')))).toBe('xin chào ~?');
+  });
+});
+
+describe('checkCustomerCancel', () => {
+  const order = { channel: 'online', status: 'pending', customer: { id: 'u1' } };
+  it('allows owner while not confirmed', () => {
+    expect(checkCustomerCancel(order, 'u1', ' Đổi ý ')).toBe('Đổi ý');
+    expect(checkCustomerCancel({ ...order, status: 'awaiting_payment' }, 'u1', 'x')).toBe('x');
+  });
+  it('blocks others, confirmed orders and empty reason', () => {
+    expect(ruleCode(() => checkCustomerCancel(order, 'u2', 'x'))).toBe('not_owner');
+    expect(ruleCode(() => checkCustomerCancel({ ...order, channel: 'in_store' }, 'u1', 'x'))).toBe('not_owner');
+    expect(ruleCode(() => checkCustomerCancel({ ...order, status: 'confirmed' }, 'u1', 'x'))).toBe('not_cancellable');
+    expect(ruleCode(() => checkCustomerCancel(order, 'u1', '  '))).toBe('invalid_request');
+    expect(ruleCode(() => checkCustomerCancel(null, 'u1', 'x'))).toBe('order_missing');
   });
 });
 

@@ -1,8 +1,10 @@
 // Cloudflare Worker – API bán online Meow Coffee.
 //   GET  /health   kiểm tra Worker đang chạy
 //   POST /orders   khách tạo đơn online (cần Firebase ID token)
+//   POST /orders/{id}/cancel   khách hủy đơn khi quán chưa xác nhận
 import { AuthError, verifyIdToken } from './firebase/idToken';
 import { Firestore, FirestoreError } from './firebase/firestore';
+import { cancelOrder } from './orders/cancelOrder';
 import { createOrder } from './orders/createOrder';
 import { OrderRuleError } from './orders/rules';
 
@@ -47,6 +49,18 @@ export default {
         const db = new Firestore(env.FIREBASE_PROJECT_ID, env.FIREBASE_SERVICE_ACCOUNT);
         const result = await createOrder(db, claims, body);
         return json(201, result);
+      }
+
+      const cancelMatch = /^\/orders\/([^/]+)\/cancel$/.exec(url.pathname);
+      if (request.method === 'POST' && cancelMatch) {
+        const auth = request.headers.get('authorization') ?? '';
+        const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+        if (!token) return error(401, 'unauthenticated', 'Bạn chưa đăng nhập');
+        const claims = await verifyIdToken(token, env.FIREBASE_PROJECT_ID);
+        const body = await request.json().catch(() => null);
+        const db = new Firestore(env.FIREBASE_PROJECT_ID, env.FIREBASE_SERVICE_ACCOUNT);
+        const result = await cancelOrder(db, claims, decodeURIComponent(cancelMatch[1]), body);
+        return json(200, result);
       }
 
       return error(404, 'not_found', 'Không tìm thấy');

@@ -175,7 +175,7 @@ class ShopSettings {
     this.maxDeliveryKm = 7,
     this.minOrderValue = 50000,
     this.shippingFee = const ShippingFeeConfig(),
-    this.paymentTimeoutMin = 5,
+    this.paymentTimeoutMin = 2,
     this.requireShipperOnShift = false,
     this.dispatch = const DispatchConfig(),
     this.deliveryFailure = const DeliveryFailureConfig(),

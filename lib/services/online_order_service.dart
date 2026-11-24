@@ -5,9 +5,9 @@ import 'package:http/http.dart' as http;
 
 import '../config/env_config.dart';
 import '../core/enums.dart';
-import '../providers/cart_provider.dart';
+import '../providers/customer_cart_provider.dart';
 
-/// Lỗi tạo đơn online (thông báo tiếng Việt từ Worker).
+/// Lỗi gọi API đơn online (thông báo tiếng Việt từ Worker).
 class OnlineOrderError implements Exception {
   final String code;
   final String message;
@@ -36,16 +36,25 @@ class OnlineOrderResult {
   });
 }
 
-/// Gọi Cloudflare Worker `POST /orders` (O28). App chỉ gửi mã món, size,
-/// số lượng, ghi chú, mã địa chỉ – giá và tổng tiền do Worker tính.
+/// Lý do khách hủy đơn (chọn nhanh; "Khác" thì gõ thêm).
+const customerCancelReasons = [
+  'Đổi ý, không muốn mua nữa',
+  'Đặt nhầm món / số lượng',
+  'Sai địa chỉ giao hàng',
+  'Muốn đổi phương thức thanh toán',
+  'Chờ quán xác nhận quá lâu',
+  'Khác',
+];
+
+/// Gọi Cloudflare Worker (O28). App chỉ gửi mã món, size, số lượng, ghi chú,
+/// mã địa chỉ – giá và tổng tiền do Worker tính.
 class OnlineOrderService {
   OnlineOrderService._();
 
-  static Future<OnlineOrderResult> create({
-    required List<CartItem> items,
-    required String addressId,
-    required PaymentMethod method,
-    String note = '',
+  static Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    required int okStatus,
   }) async {
     final base = EnvConfig.orderApiBaseUrl.replaceAll(RegExp(r'/$'), '');
     if (base.isEmpty) {
@@ -59,39 +68,50 @@ class OnlineOrderService {
     try {
       res = await http
           .post(
-            Uri.parse('$base/orders'),
+            Uri.parse('$base$path'),
             headers: {
               'authorization': 'Bearer $token',
               'content-type': 'application/json',
             },
-            body: jsonEncode({
-              'items': [
-                for (final i in items)
-                  {
-                    'product_id': i.product.id,
-                    'size': i.size,
-                    'quantity': i.quantity,
-                    'note': i.note,
-                  },
-              ],
-              'address_id': addressId,
-              'payment_method': method.value,
-              'note': note.trim(),
-            }),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 25));
     } catch (_) {
       throw const OnlineOrderError('network', 'Không kết nối được máy chủ, vui lòng thử lại');
     }
-
-    final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-    if (res.statusCode != 201) {
-      final err = body['error'] as Map<String, dynamic>? ?? const {};
+    Map<String, dynamic> json;
+    try {
+      json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    } catch (_) {
+      throw OnlineOrderError('bad_response', 'Máy chủ trả lời không hợp lệ (${res.statusCode})');
+    }
+    if (res.statusCode != okStatus) {
+      final err = json['error'] as Map<String, dynamic>? ?? const {};
       throw OnlineOrderError(
         err['code'] as String? ?? 'error',
-        err['message'] as String? ?? 'Đặt đơn thất bại (${res.statusCode})',
+        err['message'] as String? ?? 'Có lỗi xảy ra (${res.statusCode})',
       );
     }
+    return json;
+  }
+
+  /// `POST /orders` – tạo đơn online.
+  static Future<OnlineOrderResult> create({
+    required List<CustomerCartLine> items,
+    required String addressId,
+    required PaymentMethod method,
+    String note = '',
+  }) async {
+    final body = await _post(
+      '/orders',
+      {
+        'items': [for (final i in items) i.toMap()],
+        'address_id': addressId,
+        'payment_method': method.value,
+        'note': note.trim(),
+      },
+      okStatus: 201,
+    );
     final expires = body['payment_expires_at'] as String?;
     return OnlineOrderResult(
       orderId: body['order_id'] as String,
@@ -102,5 +122,10 @@ class OnlineOrderService {
       paymentExpiresAt: expires == null ? null : DateTime.parse(expires).toLocal(),
       distanceKm: (body['distance_km'] as num).toDouble(),
     );
+  }
+
+  /// `POST /orders/{id}/cancel` – khách hủy khi quán chưa xác nhận (O15).
+  static Future<void> cancel(String orderId, String reason) async {
+    await _post('/orders/$orderId/cancel', {'reason': reason.trim()}, okStatus: 200);
   }
 }

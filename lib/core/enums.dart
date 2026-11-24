@@ -55,12 +55,21 @@ enum Fulfillment {
 }
 
 enum OrderStatus {
+  awaitingPayment('awaiting_payment', 'Chờ thanh toán'),
   pending('pending', 'Chờ xác nhận'),
   confirmed('confirmed', 'Đã xác nhận'),
   preparing('preparing', 'Đang pha chế'),
+  ready('ready', 'Chờ giao'),
   delivering('delivering', 'Đang giao'),
+  deliveryFailed('delivery_failed', 'Giao thất bại'),
   completed('completed', 'Hoàn tất'),
   cancelled('cancelled', 'Đã hủy');
+
+  /// Đơn còn đang xử lý (chưa hoàn tất / hủy).
+  bool get isActive => this != completed && this != cancelled;
+
+  /// Khách được tự hủy khi quán chưa xác nhận (O15).
+  bool get customerCanCancel => this == awaitingPayment || this == pending;
 
   const OrderStatus(this.value, this.label);
   final String value;

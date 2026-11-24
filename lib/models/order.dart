@@ -97,6 +97,14 @@ class Order {
   final PersonRef? cancelledBy;
   final String? cancelReason;
 
+  // ---- Đơn online (channel = online) ----
+  final OrderCustomer? customer;
+  final OrderDelivery? delivery;
+  final List<StatusEntry> statusHistory;
+
+  /// Hạn chuyển khoản VietQR (đơn `awaiting_payment`).
+  final DateTime? paymentExpiresAt;
+
   const Order({
     required this.id,
     required this.orderCode,
@@ -117,9 +125,25 @@ class Order {
     this.cancelledAt,
     this.cancelledBy,
     this.cancelReason,
+    this.customer,
+    this.delivery,
+    this.statusHistory = const [],
+    this.paymentExpiresAt,
   });
 
   bool get isCancelled => status == OrderStatus.cancelled;
+  bool get isOnline => channel == OrderChannel.online;
+
+  /// Nội dung chuyển khoản VietQR: mã đơn bỏ dấu gạch ("ON231126005").
+  String get transferContent => orderCode.replaceAll('-', '');
+
+  /// Thời điểm đơn chuyển sang trạng thái `s` (lần gần nhất), nếu có.
+  DateTime? timeOf(OrderStatus s) {
+    for (final e in statusHistory.reversed) {
+      if (e.status == s) return e.at;
+    }
+    return null;
+  }
 
   int get totalItems => items.fold(0, (s, i) => s + i.quantity);
 
@@ -158,9 +182,94 @@ class Order {
           ? PersonRef.fromMap(map['cancelled_by'])
           : null,
       cancelReason: map['cancel_reason'] as String?,
+      customer: map['customer'] is Map
+          ? OrderCustomer.fromMap(Map<String, dynamic>.from(map['customer']))
+          : null,
+      delivery: map['delivery'] is Map
+          ? OrderDelivery.fromMap(Map<String, dynamic>.from(map['delivery']))
+          : null,
+      statusHistory: (map['status_history'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((m) => StatusEntry.fromMap(Map<String, dynamic>.from(m)))
+          .toList(),
+      paymentExpiresAt: map['payment'] is Map
+          ? toDate((map['payment'] as Map)['expires_at'])
+          : null,
     );
   }
 
   factory Order.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
       Order.fromMap(doc.data() ?? const {}, id: doc.id);
+}
+
+class OrderCustomer {
+  final String id;
+  final String name;
+  final String phone;
+
+  const OrderCustomer({required this.id, required this.name, required this.phone});
+
+  factory OrderCustomer.fromMap(Map<String, dynamic> m) => OrderCustomer(
+        id: m['id']?.toString() ?? '',
+        name: m['name']?.toString() ?? '',
+        phone: m['phone']?.toString() ?? '',
+      );
+}
+
+/// Thông tin giao hàng chụp lúc đặt đơn (Worker ghi).
+class OrderDelivery {
+  final String receiverName;
+  final String receiverPhone;
+  final String addressText;
+  final String note;
+  final double distanceKm;
+  final bool distanceEstimated;
+  final int fee;
+  final PersonRef? shipper;
+  final String? shipperPhone;
+
+  const OrderDelivery({
+    required this.receiverName,
+    required this.receiverPhone,
+    required this.addressText,
+    required this.note,
+    required this.distanceKm,
+    required this.distanceEstimated,
+    required this.fee,
+    this.shipper,
+    this.shipperPhone,
+  });
+
+  factory OrderDelivery.fromMap(Map<String, dynamic> m) {
+    final shipper = m['shipper'];
+    return OrderDelivery(
+      receiverName: m['receiver_name']?.toString() ?? '',
+      receiverPhone: m['receiver_phone']?.toString() ?? '',
+      addressText: m['address_text']?.toString() ?? '',
+      note: m['note']?.toString() ?? '',
+      distanceKm: (m['distance_km'] as num?)?.toDouble() ?? 0,
+      distanceEstimated: m['distance_source'] == 'haversine',
+      fee: (m['fee'] as num?)?.round() ?? 0,
+      shipper: shipper is Map ? PersonRef.fromMap(shipper) : null,
+      shipperPhone: shipper is Map ? shipper['phone']?.toString() : null,
+    );
+  }
+}
+
+class StatusEntry {
+  final OrderStatus status;
+  final DateTime? at;
+  final String byRole;
+
+  const StatusEntry({required this.status, required this.at, required this.byRole});
+
+  factory StatusEntry.fromMap(Map<String, dynamic> m) {
+    final at = m['at'];
+    final by = m['by'];
+    return StatusEntry(
+      status: OrderStatus.fromValue(m['status'] as String?),
+      at: at is Timestamp ? at.toDate() : null,
+      byRole: by is Map ? (by['role']?.toString() ?? '') : '',
+    );
+  }
 }

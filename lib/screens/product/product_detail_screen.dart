@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/product.dart';
-import '../../providers/cart_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
@@ -38,12 +37,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _addToCart(Product product, String size) {
-    context.read<CartProvider>().addItem(
-          product,
-          size: size,
-          quantity: _quantity,
-          note: _noteController.text,
-        );
+    try {
+      addToRightCart(
+        context,
+        product,
+        size: size,
+        quantity: _quantity,
+        note: _noteController.text,
+      );
+    } on StateError catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
     final label = size == Product.defaultSize
         ? '$_quantity × ${product.name}'
         : '$_quantity × ${product.name} ($size)';
@@ -90,9 +96,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         : Product.defaultSize;
     final soldOut = !product.isAvailable;
     final unit = size == null ? 0 : product.priceOf(size);
-    // Khách chưa đặt online được (bước 5) → chỉ xem món.
-    final session = context.watch<SessionProvider>();
-    final canSell = !session.isCustomer && !session.isShipper;
+    // Khách → giỏ online, NV/admin → giỏ tại quầy; shipper chỉ xem món.
+    final canSell = !context.watch<SessionProvider>().isShipper;
 
     return Column(
       children: [
@@ -221,7 +226,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: MeowPrimaryButton(
                 label: !canSell
-                    ? 'ĐẶT MÓN ONLINE SẮP RA MẮT'
+                    ? 'CHỈ XEM MÓN'
                     : soldOut
                         ? 'MÓN ĐANG HẾT HÀNG'
                         : size == null

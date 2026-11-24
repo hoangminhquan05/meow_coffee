@@ -96,6 +96,8 @@ class OrderService {
   /// Q7: admin hủy mọi đơn mọi lúc; nhân viên chỉ đơn của mình trong 30 phút.
   static bool canCancel(Order order, UserModel? user, {DateTime? now}) {
     if (user == null || order.status != OrderStatus.completed) return false;
+    // Đơn online có quy trình hủy riêng (bước 7), không hủy kiểu tại quầy.
+    if (order.isOnline) return false;
     if (user.isAdmin) return true;
     if (order.seller?.id != user.uid) return false;
     final created = order.createdAt;
@@ -134,6 +136,15 @@ class OrderService {
       'cancel_reason': trimmed,
     });
   }
+
+  /// Đơn online của một khách, mới nhất trước (Rules yêu cầu lọc đúng 2 điều kiện).
+  static Stream<List<Order>> watchCustomerOrders(String uid, {int limit = 50}) => _orders
+      .where('channel', isEqualTo: OrderChannel.online.value)
+      .where('customer.id', isEqualTo: uid)
+      .orderBy('created_at', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(Order.fromDoc).toList());
 
   static Stream<Order?> watchOrder(String id) => _orders
       .doc(id)

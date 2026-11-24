@@ -66,6 +66,7 @@ class _ProductScreenState extends State<ProductScreen> {
     // Chỉ NV/admin bán tại quầy, đánh dấu hết hàng và dùng thanh dưới cũ.
     final session = context.watch<SessionProvider>();
     final canSell = !session.isCustomer && !session.isShipper;
+    final canAdd = !session.isShipper;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -345,10 +346,10 @@ class _ProductScreenState extends State<ProductScreen> {
                                   ? () => showAvailabilitySheet(context, product)
                                   : null,
                               // "+" mở bảng chọn size (Q11). Khách: tạm xem chi tiết.
-                              onAddToCart: canSell
+                              onAddToCart: canAdd
                                   ? () => showAddToCartSheet(context, product)
                                   : openDetail,
-                              addLabel: canSell ? '+ Thêm' : 'Xem món',
+                              addLabel: canAdd ? '+ Thêm' : 'Xem món',
                             );
                           },
                         ),

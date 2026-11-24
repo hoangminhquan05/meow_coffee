@@ -8,12 +8,16 @@ import 'package:provider/provider.dart';
 import 'config/env_config.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/customer_cart_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/shop_settings_provider.dart';
 import 'screens/address/address_book_screen.dart';
 import 'screens/admin/shop_settings_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/verify_account_screen.dart';
+import 'screens/online/checkout_screen.dart';
+import 'screens/online/customer_cart_screen.dart';
+import 'screens/online/customer_order_detail_screen.dart';
 import 'screens/shell/role_shells.dart';
 import 'screens/admin/add_product_screen.dart';
 import 'screens/admin/add_staff_screen.dart';
@@ -76,6 +80,13 @@ class MeowCoffeeApp extends StatelessWidget {
             };
             return session;
           },
+        ),
+        // Giỏ hàng khách (Firestore carts/{uid}): chỉ chạy với tài khoản khách.
+        ChangeNotifierProxyProvider<SessionProvider, CustomerCartProvider>(
+          lazy: false,
+          create: (_) => CustomerCartProvider(),
+          update: (_, session, cart) =>
+              cart!..bindTo(session.isCustomer ? session.uid : null),
         ),
         // Cài đặt quán: chỉ lắng nghe khi đã đăng nhập.
         ChangeNotifierProxyProvider<SessionProvider, ShopSettingsProvider>(
@@ -177,6 +188,17 @@ class MeowCoffeeApp extends StatelessWidget {
                   const VerifyAccountArgs();
               return MaterialPageRoute(
                 builder: (_) => VerifyAccountScreen(args: args),
+              );
+            case '/checkout':
+              return MaterialPageRoute(builder: (_) => const CheckoutScreen());
+            case '/online_cart':
+              return MaterialPageRoute(
+                builder: (_) => const CustomerCartScreen(standalone: true),
+              );
+            case '/my_order':
+              final orderId = settings.arguments as String? ?? '';
+              return MaterialPageRoute(
+                builder: (_) => CustomerOrderDetailScreen(orderId: orderId),
               );
             case '/addresses':
               return MaterialPageRoute(

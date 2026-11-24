@@ -3,9 +3,30 @@ import 'package:provider/provider.dart';
 
 import '../models/product.dart';
 import '../providers/cart_provider.dart';
+import '../providers/customer_cart_provider.dart';
+import '../providers/session_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'meow_ui.dart';
+
+/// Thêm vào đúng giỏ: khách → giỏ online (Firestore), NV/admin → giỏ bán tại quầy.
+void addToRightCart(
+  BuildContext context,
+  Product product, {
+  required String size,
+  required int quantity,
+  required String note,
+}) {
+  if (context.read<SessionProvider>().isCustomer) {
+    context
+        .read<CustomerCartProvider>()
+        .add(product, size: size, quantity: quantity, note: note);
+  } else {
+    context
+        .read<CartProvider>()
+        .addItem(product, size: size, quantity: quantity, note: note);
+  }
+}
 
 /// Bảng chọn món (L1, Q11): size bắt buộc chọn (không chọn sẵn),
 /// số lượng, ghi chú tự do. Dùng cho nút "+" trên thẻ món.
@@ -56,12 +77,19 @@ class _AddToCartSheetState extends State<_AddToCartSheet> {
   void _add() {
     final size = _size;
     if (size == null) return;
-    context.read<CartProvider>().addItem(
-          widget.product,
-          size: size,
-          quantity: _quantity,
-          note: _noteController.text,
-        );
+    try {
+      addToRightCart(
+        context,
+        widget.product,
+        size: size,
+        quantity: _quantity,
+        note: _noteController.text,
+      );
+    } on StateError catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
     final label = size == Product.defaultSize
         ? '$_quantity × ${widget.product.name}'
         : '$_quantity × ${widget.product.name} ($size)';
