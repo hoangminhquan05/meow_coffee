@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/enums.dart';
 import '../models/order.dart';
+import '../providers/shop_settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
@@ -16,14 +18,16 @@ class OrderReceiptView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tên/địa chỉ/hotline lấy từ Cài đặt quán.
+    final shop = context.watch<ShopSettingsProvider>().settings;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'MEOW COFFEE',
+        Text(
+          shop.name.toUpperCase(),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: AppColors.brand,
@@ -31,10 +35,14 @@ class OrderReceiptView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        const Text(
-          '83 Hai Bà Trưng, Hoàn Kiếm, TP. Hà Nội\nHotline: 032 8386 66',
+        Text(
+          [
+            if (shop.address.isNotEmpty) shop.address,
+            if (shop.phone.isNotEmpty) 'Hotline: ${shop.phone}',
+          ].join('\n'),
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
+          style: const TextStyle(
+              fontSize: 11.5, color: AppColors.muted, height: 1.4),
         ),
         const SizedBox(height: 12),
         // Mã đơn to, dễ đọc khi gọi khách lấy món.

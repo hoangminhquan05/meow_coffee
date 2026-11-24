@@ -89,6 +89,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           onTap: () => Navigator.pushNamed(context, '/staff_management'),
         ),
         _ProfileMenuItem(
+          title: 'Cài đặt quán',
+          subtitle: 'Vị trí, giờ nhận đơn online, phí giao',
+          icon: Icons.storefront_outlined,
+          isAdminOnly: true,
+          onTap: () => Navigator.pushNamed(context, '/shop_settings'),
+        ),
+        _ProfileMenuItem(
           title: 'Quản lý banner',
           subtitle: 'Hình ảnh quảng bá trang chủ',
           icon: Icons.collections_outlined,

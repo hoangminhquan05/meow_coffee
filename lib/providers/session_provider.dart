@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/enums.dart';
 import '../core/firestore_paths.dart';
 import '../models/order.dart';
 import '../models/user_model.dart';
@@ -37,6 +38,23 @@ class SessionProvider extends ChangeNotifier {
 
   PersonRef get personRef => PersonRef(id: uid, name: _user?.name ?? '');
 
+  bool get isCustomer => _user?.role == UserRole.customer;
+  bool get isShipper => _user?.role == UserRole.shipper;
+
+  /// Màn chính theo vai trò.
+  String get homeRoute => homeRouteFor(_user?.role);
+
+  static String homeRouteFor(UserRole? role) {
+    switch (role) {
+      case UserRole.customer:
+        return '/customer';
+      case UserRole.shipper:
+        return '/shipper';
+      default:
+        return '/home';
+    }
+  }
+
   void _onAuthChanged(User? authUser) {
     _userSub?.cancel();
     _userSub = null;
@@ -55,6 +73,13 @@ class SessionProvider extends ChangeNotifier {
         .listen(
           (doc) {
             if (!doc.exists) {
+              // Khách vừa đăng ký: hồ sơ được ghi ngay sau khi tạo tài khoản
+              // Auth, nên chờ thêm thay vì đăng xuất (snapshot sẽ báo lại).
+              final created = authUser.metadata.creationTime;
+              final justCreated = created != null &&
+                  DateTime.now().difference(created) <
+                      const Duration(seconds: 30);
+              if (justCreated) return;
               _forceSignOut(SessionEndReason.noProfile);
               return;
             }

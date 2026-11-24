@@ -13,6 +13,11 @@ class UserModel {
   final bool isActive;
   final DateTime? createdAt;
 
+  /// SĐT dạng quốc tế (+84…), dùng để đối chiếu với SĐT đã xác minh OTP.
+  final String phoneE164;
+  final bool phoneVerified;
+  final bool emailVerified;
+
   const UserModel({
     this.uid = '',
     this.name = '',
@@ -22,9 +27,15 @@ class UserModel {
     this.avtUrl = '',
     this.isActive = true,
     this.createdAt,
+    this.phoneE164 = '',
+    this.phoneVerified = false,
+    this.emailVerified = false,
   });
 
   bool get isAdmin => role == UserRole.admin;
+
+  /// Khách được đặt đơn online khi đã xác minh SĐT hoặc email (O2).
+  bool get isVerified => phoneVerified || emailVerified;
 
   factory UserModel.fromMap(Map<String, dynamic> map, {required String uid}) {
     final created = map['created_at'];
@@ -37,6 +48,9 @@ class UserModel {
       avtUrl: map['avt_url'] as String? ?? '',
       isActive: map['is_active'] as bool? ?? true,
       createdAt: created is Timestamp ? created.toDate() : null,
+      phoneE164: map['phone_e164'] as String? ?? '',
+      phoneVerified: map['phone_verified'] as bool? ?? false,
+      emailVerified: map['email_verified'] as bool? ?? false,
     );
   }
 
@@ -70,6 +84,9 @@ class UserModel {
       avtUrl: avtUrl ?? this.avtUrl,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
+      phoneE164: phoneE164,
+      phoneVerified: phoneVerified,
+      emailVerified: emailVerified,
     );
   }
 }

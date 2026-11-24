@@ -47,6 +47,9 @@ dependencies:
   pdf: ^3.11.3
   path_provider: ^2.1.5
   flutter_dotenv: ^5.2.1
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  geolocator: ^14.1.2
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +75,8 @@ flutter:
 
   assets:
     - assets/images/
+    # Tỉnh/Thành → Phường/Xã theo địa giới từ 1/7/2025 (nguồn: provinces.open-api.vn v2)
+    - assets/data/
     - .env
 
   # To add assets to your application, add an assets section, like this:

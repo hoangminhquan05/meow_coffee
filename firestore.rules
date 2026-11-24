@@ -1,7 +1,8 @@
 rules_version = '2';
 
-// Firestore Security Rules – Meow Coffee (bán tại quán).
-// Xem docs/ke-hoach-ban-tai-quan.md mục 5.
+// Firestore Security Rules – Meow Coffee.
+// Bán tại quán: docs/ke-hoach-ban-tai-quan.md mục 5.
+// Bán online:   docs/ke-hoach-ban-online.md mục 10.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -15,15 +16,28 @@ service cloud.firestore {
         && me().is_active == true;
     }
     function isAdmin() { return isActive() && me().role == 'admin'; }
+    function isStaff() { return isActive() && me().role == 'staff'; }
+    // Người bán tại quầy: nhân viên hoặc admin (không gồm khách, shipper).
+    function isSeller() { return isActive() && me().role in ['staff', 'admin']; }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
-    // Sản phẩm: ai cũng đọc; nhân viên chỉ bật/tắt hết hàng (Q9); admin toàn quyền.
+    // Sản phẩm: ai đăng nhập cũng đọc; NV/admin bật/tắt hết hàng (Q9); admin toàn quyền.
     match /products/{id} {
       allow read: if isActive();
-      allow update: if isActive() && onlyChanges(['is_available']);
+      allow update: if isSeller() && onlyChanges(['is_available']);
       allow create, update, delete: if isAdmin();
+    }
+
+    // Cài đặt quán: ai đăng nhập cũng đọc; admin sửa toàn bộ;
+    // nhân viên chỉ bật/tắt tạm ngưng nhận đơn online.
+    match /settings/shop {
+      allow read: if isActive();
+      allow create, update: if isAdmin();
+      allow update: if isStaff()
+        && onlyChanges(['online_paused', 'updated_at', 'updated_by'])
+        && request.resource.data.updated_by.id == request.auth.uid;
     }
 
     match /banners/{id} {
@@ -31,26 +45,33 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Bàn: nhân viên chỉ đổi trạng thái (L11); admin thêm/sửa/xóa.
+    // Bàn: NV/admin đổi trạng thái (L11); admin thêm/sửa/xóa.
     match /tables/{id} {
-      allow read: if isActive();
-      allow update: if isActive() && onlyChanges(['status', 'updated_at']);
+      allow read: if isSeller();
+      allow update: if isSeller() && onlyChanges(['status', 'updated_at']);
       allow create, update, delete: if isAdmin();
     }
 
-    // Bộ đếm mã đơn theo ngày: chỉ tăng 1 mỗi lần.
+    // Bộ đếm mã đơn tại quầy theo ngày: chỉ tăng 1 mỗi lần.
+    // (Bộ đếm online `online_*` do Cloudflare Worker ghi bằng service account.)
     match /counters/{id} {
-      allow read: if isActive();
-      allow create: if isActive() && request.resource.data.seq == 1;
-      allow update: if isActive() && request.resource.data.seq == resource.data.seq + 1;
+      allow read: if isSeller();
+      allow create: if isSeller() && id.matches('orders_[0-9]{8}')
+        && request.resource.data.seq == 1;
+      allow update: if isSeller() && id.matches('orders_[0-9]{8}')
+        && request.resource.data.seq == resource.data.seq + 1;
     }
 
     match /orders/{id} {
+      // Đơn online do Cloudflare Worker tạo (service account, bỏ qua Rules);
+      // khách chỉ đọc đơn online của chính mình.
       allow read: if isAdmin()
-        || (isActive() && resource.data.seller.id == request.auth.uid);
+        || (isSeller() && resource.data.get('seller', {}).get('id', '') == request.auth.uid)
+        || (isActive() && resource.data.channel == 'online'
+            && resource.data.customer.id == request.auth.uid);
 
       // Tạo đơn tại quán: thu tiền trước (Q2); tại quán bắt buộc có bàn (Q13).
-      allow create: if isActive()
+      allow create: if isSeller()
         && request.resource.data.channel == 'in_store'
         && request.resource.data.status == 'completed'
         && request.resource.data.payment_status == 'paid'
@@ -63,7 +84,7 @@ service cloud.firestore {
 
       // Hủy đơn (Q7): admin mọi lúc; nhân viên chỉ đơn của mình trong 30 phút.
       // Không được sửa trường nào khác của đơn (Q5).
-      allow update: if isActive()
+      allow update: if isSeller()
         && resource.data.status == 'completed'
         && request.resource.data.status == 'cancelled'
         && request.resource.data.payment_status == 'refunded'
@@ -78,13 +99,62 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Người dùng: tự sửa tên/SĐT/avatar; admin quản lý (khóa/mở khóa, thêm).
-    // Cho phép đọc hồ sơ của chính mình kể cả khi bị khóa (để app biết và đăng xuất).
+    // Người dùng tự sửa hồ sơ. Cờ đã xác minh chỉ được bật khi Firebase Auth
+    // xác nhận thật: SĐT trong ID token trùng phone_e164 / email_verified = true.
+    function selfUpdateOk() {
+      let d = request.resource.data;
+      let keys = d.diff(resource.data).affectedKeys();
+      let tokenPhone = request.auth.token.get('phone_number', '');
+      return keys.hasOnly(['name', 'phone', 'phone_e164', 'avt_url',
+                           'phone_verified', 'email_verified'])
+        && (!keys.hasAny(['phone_verified', 'phone_e164'])
+            || d.get('phone_verified', false) == false
+            || tokenPhone == d.get('phone_e164', ''))
+        && (!keys.hasAny(['email_verified'])
+            || d.email_verified == false
+            || request.auth.token.get('email_verified', false) == true)
+        // Khách đổi SĐT phải đổi kèm phone_e164 đã xác minh OTP.
+        && (resource.data.role != 'customer'
+            || !keys.hasAny(['phone'])
+            || (d.get('phone_verified', false) == true
+                && tokenPhone == d.get('phone_e164', '')));
+    }
+
+    // Đọc: chính mình (kể cả khi bị khóa, để app biết và đăng xuất) hoặc admin.
     match /users/{uid} {
-      allow read: if (signedIn() && request.auth.uid == uid) || isActive();
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      // Khách tự đăng ký: chỉ tạo được hồ sơ khách, chưa xác minh.
+      allow create: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.role == 'customer'
+            && request.resource.data.is_active == true
+            && request.resource.data.phone_verified == false
+            && request.resource.data.email_verified == false
+            && request.resource.data.email == request.auth.token.email);
       allow update: if isAdmin()
-        || (isActive() && request.auth.uid == uid && onlyChanges(['name', 'phone', 'avt_url']));
-      allow create, delete: if isAdmin();
+        || (isActive() && request.auth.uid == uid && selfUpdateOk());
+      allow delete: if isAdmin();
+    }
+
+    // Sổ địa chỉ (O7): chỉ chủ tài khoản; dữ liệu phải đủ và có toạ độ hợp lệ.
+    // Giới hạn 3 địa chỉ kiểm ở app (Rules không đếm được tài liệu).
+    function validAddress() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['label', 'receiver_name', 'receiver_phone',
+                              'province', 'ward', 'street', 'location', 'is_default'])
+        && d.label in ['home', 'work', 'other']
+        && d.receiver_name is string && d.receiver_name.size() > 0
+        && d.receiver_phone is string && d.receiver_phone.size() > 0
+        && d.street is string && d.street.size() > 0
+        && d.province.code is int && d.ward.code is int
+        && d.location.lat is number && d.location.lat >= -90 && d.location.lat <= 90
+        && d.location.lng is number && d.location.lng >= -180 && d.location.lng <= 180
+        && d.is_default is bool;
+    }
+
+    match /users/{uid}/addresses/{addressId} {
+      allow read, delete: if isActive() && request.auth.uid == uid;
+      allow create, update: if isActive() && request.auth.uid == uid && validAddress();
     }
 
     // Collection dành cho bán online (chưa triển khai): chặn mặc định.

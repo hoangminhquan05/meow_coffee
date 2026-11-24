@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/product.dart';
+import '../../providers/session_provider.dart';
 import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -61,10 +63,13 @@ class _ProductScreenState extends State<ProductScreen> {
     ];
     if (!categories.contains(_category)) _category = _allCategories;
     final filtered = _filter(all);
+    // Chỉ NV/admin bán tại quầy, đánh dấu hết hàng và dùng thanh dưới cũ.
+    final session = context.watch<SessionProvider>();
+    final canSell = !session.isCustomer && !session.isShipper;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 1),
+      bottomNavigationBar: canSell ? const BottomNavBar(currentIndex: 1) : null,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,11 +291,14 @@ class _ProductScreenState extends State<ProductScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Nhấn giữ món để đánh dấu hết hàng / bán lại',
-                    style: TextStyle(fontSize: 11, color: AppColors.mutedLight),
-                  ),
+                  if (canSell) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Nhấn giữ món để đánh dấu hết hàng / bán lại',
+                      style:
+                          TextStyle(fontSize: 11, color: AppColors.mutedLight),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -325,20 +333,22 @@ class _ProductScreenState extends State<ProductScreen> {
                               const SizedBox(height: 14),
                           itemBuilder: (context, index) {
                             final product = filtered[index];
-                            return _ProductCard(
-                              product: product,
-                              onTap: () {
-                                Navigator.pushNamed(
+                            void openDetail() => Navigator.pushNamed(
                                   context,
                                   '/product_detail',
                                   arguments: product.id,
                                 );
-                              },
-                              onLongPress: () =>
-                                  showAvailabilitySheet(context, product),
-                              // "+" mở bảng chọn size (Q11).
-                              onAddToCart: () =>
-                                  showAddToCartSheet(context, product),
+                            return _ProductCard(
+                              product: product,
+                              onTap: openDetail,
+                              onLongPress: canSell
+                                  ? () => showAvailabilitySheet(context, product)
+                                  : null,
+                              // "+" mở bảng chọn size (Q11). Khách: tạm xem chi tiết.
+                              onAddToCart: canSell
+                                  ? () => showAddToCartSheet(context, product)
+                                  : openDetail,
+                              addLabel: canSell ? '+ Thêm' : 'Xem món',
                             );
                           },
                         ),
@@ -353,14 +363,16 @@ class _ProductScreenState extends State<ProductScreen> {
 class _ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
   final VoidCallback onAddToCart;
+  final String addLabel;
 
   const _ProductCard({
     required this.product,
     required this.onTap,
     required this.onLongPress,
     required this.onAddToCart,
+    required this.addLabel,
   });
 
   @override
@@ -470,7 +482,7 @@ class _ProductCard extends StatelessWidget {
                                   vertical: 5,
                                 ),
                                 child: Text(
-                                  soldOut ? 'Hết hàng' : '+ Thêm',
+                                  soldOut ? 'Hết hàng' : addLabel,
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

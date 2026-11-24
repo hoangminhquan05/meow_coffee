@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,12 @@ import 'config/env_config.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/session_provider.dart';
+import 'providers/shop_settings_provider.dart';
+import 'screens/address/address_book_screen.dart';
+import 'screens/admin/shop_settings_screen.dart';
+import 'screens/auth/register_screen.dart';
+import 'screens/auth/verify_account_screen.dart';
+import 'screens/shell/role_shells.dart';
 import 'screens/admin/add_product_screen.dart';
 import 'screens/admin/add_staff_screen.dart';
 import 'screens/admin/admin_product_screen.dart';
@@ -35,6 +43,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
   await Firebase.initializeApp(options: EnvConfig.firebaseOptions);
+  // Chế độ thử OTP: chỉ dùng số test khai báo trong Firebase Console, bỏ bước
+  // reCAPTCHA. Chỉ bật trong bản debug và khi .env có AUTH_PHONE_TEST_MODE=true
+  // (project chưa bật Blaze nên không gửi được SMS thật).
+  if (kDebugMode && EnvConfig.authPhoneTestMode) {
+    await FirebaseAuth.instance
+        .setSettings(appVerificationDisabledForTesting: true);
+  }
   runApp(const MeowCoffeeApp());
 }
 
@@ -61,6 +76,13 @@ class MeowCoffeeApp extends StatelessWidget {
             };
             return session;
           },
+        ),
+        // Cài đặt quán: chỉ lắng nghe khi đã đăng nhập.
+        ChangeNotifierProxyProvider<SessionProvider, ShopSettingsProvider>(
+          lazy: false,
+          create: (_) => ShopSettingsProvider(),
+          update: (_, session, shop) =>
+              shop!..setActive(session.isSignedIn),
         ),
       ],
       child: MaterialApp(
@@ -147,6 +169,26 @@ class MeowCoffeeApp extends StatelessWidget {
             case '/table_management':
               return MaterialPageRoute(
                 builder: (_) => const TableManagementScreen(),
+              );
+            case '/register':
+              return MaterialPageRoute(builder: (_) => const RegisterScreen());
+            case '/verify_account':
+              final args = settings.arguments as VerifyAccountArgs? ??
+                  const VerifyAccountArgs();
+              return MaterialPageRoute(
+                builder: (_) => VerifyAccountScreen(args: args),
+              );
+            case '/addresses':
+              return MaterialPageRoute(
+                builder: (_) => const AddressBookScreen(),
+              );
+            case '/customer':
+              return MaterialPageRoute(builder: (_) => const CustomerShell());
+            case '/shipper':
+              return MaterialPageRoute(builder: (_) => const ShipperShell());
+            case '/shop_settings':
+              return MaterialPageRoute(
+                builder: (_) => const ShopSettingsScreen(),
               );
             case '/statistics':
               return MaterialPageRoute(

@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/firestore_paths.dart';
 import '../../models/banner_model.dart';
 import '../../models/product.dart';
+import '../../providers/session_provider.dart';
 import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/add_to_cart_sheet.dart';
@@ -27,7 +29,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 0),
+      // Khách dùng thanh điều hướng của CustomerShell.
+      bottomNavigationBar: context.select<SessionProvider, bool>(
+        (s) => s.isCustomer,
+      )
+          ? null
+          : const BottomNavBar(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 24),
@@ -381,18 +388,21 @@ class _CategorySection extends StatelessWidget {
                         letterSpacing: -0.3,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () =>
-                          Navigator.pushReplacementNamed(context, '/product'),
-                      child: const Text(
-                        'Xem tất cả',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.muted,
+                    // Khách chuyển tab Thực đơn bằng thanh dưới của CustomerShell.
+                    if (!context.select<SessionProvider, bool>(
+                        (s) => s.isCustomer))
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushReplacementNamed(context, '/product'),
+                        child: const Text(
+                          'Xem tất cả',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.muted,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ],
@@ -426,6 +436,11 @@ class _ProductItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final soldOut = !product.isAvailable;
+    // Chỉ NV/admin được bán tại quầy và đánh dấu hết hàng.
+    final canSell =
+        context.select<SessionProvider, bool>((s) => !s.isCustomer && !s.isShipper);
+    void openDetail() =>
+        Navigator.pushNamed(context, '/product_detail', arguments: product.id);
     return Opacity(
       opacity: soldOut ? 0.55 : 1,
       child: Container(
@@ -440,15 +455,10 @@ class _ProductItemCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              '/product_detail',
-              arguments: product.id,
-            );
-          },
+          onTap: openDetail,
           // Nhấn giữ → đánh dấu hết hàng / bán lại (L10).
-          onLongPress: () => showAvailabilitySheet(context, product),
+          onLongPress:
+              canSell ? () => showAvailabilitySheet(context, product) : null,
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Column(
@@ -518,12 +528,15 @@ class _ProductItemCard extends StatelessWidget {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
                       // "+" mở bảng chọn size (Q11), không thêm thẳng.
+                      // Khách: tạm chỉ xem chi tiết (đặt online ở bước 5).
                       onTap: soldOut
                           ? null
-                          : () => showAddToCartSheet(context, product),
+                          : canSell
+                              ? () => showAddToCartSheet(context, product)
+                              : openDetail,
                       child: Center(
                         child: Text(
-                          soldOut ? 'Hết hàng' : '+ Thêm',
+                          soldOut ? 'Hết hàng' : (canSell ? '+ Thêm' : 'Xem món'),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

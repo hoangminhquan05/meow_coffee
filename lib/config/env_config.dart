@@ -68,6 +68,16 @@ class EnvConfig {
         fallback: const String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID'),
       );
 
+  /// Cloudflare Worker – API bán online, ví dụ `https://meow-coffee-api.ten.workers.dev`.
+  static String get orderApiBaseUrl => _get(
+        'ORDER_API_BASE_URL',
+        fallback: const String.fromEnvironment('ORDER_API_BASE_URL'),
+      );
+
+  /// Thử OTP bằng số test của Firebase (bỏ reCAPTCHA), chỉ có tác dụng ở bản debug.
+  static bool get authPhoneTestMode =>
+      _get('AUTH_PHONE_TEST_MODE').toLowerCase() == 'true';
+
   static String _or(String value, String fallback) =>
       value.isNotEmpty ? value : fallback;
 

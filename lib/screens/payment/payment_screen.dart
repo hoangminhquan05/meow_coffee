@@ -9,6 +9,7 @@ import '../../models/order.dart';
 import '../../models/table_model.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/session_provider.dart';
+import '../../providers/shop_settings_provider.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../services/order_service.dart';
 import '../../services/table_service.dart';
@@ -518,7 +519,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
 /// Xuất PDF và báo kết quả.
 Future<void> exportInvoicePdf(BuildContext context, Order order) async {
   try {
-    final file = await InvoicePdfService.generateAndSave(order);
+    final file = await InvoicePdfService.generateAndSave(
+      order,
+      context.read<ShopSettingsProvider>().settings,
+    );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Đã xuất hóa đơn: ${file.path}')),

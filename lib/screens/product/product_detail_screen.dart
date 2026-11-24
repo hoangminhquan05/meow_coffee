@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/product.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/session_provider.dart';
 import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -89,6 +90,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         : Product.defaultSize;
     final soldOut = !product.isAvailable;
     final unit = size == null ? 0 : product.priceOf(size);
+    // Khách chưa đặt online được (bước 5) → chỉ xem món.
+    final session = context.watch<SessionProvider>();
+    final canSell = !session.isCustomer && !session.isShipper;
 
     return Column(
       children: [
@@ -188,7 +192,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ],
                   ),
                 ),
-                if (!soldOut) ...[
+                if (!soldOut && canSell) ...[
                   const SizedBox(height: 16),
                   MeowCard(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
@@ -216,13 +220,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: MeowPrimaryButton(
-                label: soldOut
-                    ? 'MÓN ĐANG HẾT HÀNG'
-                    : size == null
-                        ? 'CHỌN SIZE ĐỂ THÊM'
-                        : 'THÊM VÀO GIỎ • ${formatMoney(unit * _quantity)}',
+                label: !canSell
+                    ? 'ĐẶT MÓN ONLINE SẮP RA MẮT'
+                    : soldOut
+                        ? 'MÓN ĐANG HẾT HÀNG'
+                        : size == null
+                            ? 'CHỌN SIZE ĐỂ THÊM'
+                            : 'THÊM VÀO GIỎ • ${formatMoney(unit * _quantity)}',
                 icon: Icons.shopping_bag_outlined,
-                onPressed: (soldOut || size == null)
+                onPressed: (!canSell || soldOut || size == null)
                     ? null
                     : () => _addToCart(product, size),
               ),

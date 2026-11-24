@@ -4,9 +4,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 import '../../config/env_config.dart';
 import '../../core/firestore_paths.dart';
+import '../../providers/session_provider.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
@@ -27,6 +29,8 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _picker = ImagePicker();
+
+  bool get _isCustomer => context.read<SessionProvider>().isCustomer;
 
   String _avtUrl = '';
   File? _pickedImage;
@@ -136,7 +140,8 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
           .doc(uid)
           .update({
         'name': name,
-        'phone': phone,
+        // Khách đổi SĐT phải qua OTP (màn Đổi số điện thoại).
+        if (!_isCustomer) 'phone': phone,
         'avt_url': updatedAvtUrl,
       });
 
@@ -266,8 +271,11 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
                       ),
                       const SizedBox(height: 18),
                       MeowFormField(
-                        label: 'SỐ ĐIỆN THOẠI',
+                        label: _isCustomer
+                            ? 'SỐ ĐIỆN THOẠI (đổi ở mục Đổi số điện thoại)'
+                            : 'SỐ ĐIỆN THOẠI',
                         controller: _phoneController,
+                        readOnly: _isCustomer,
                         hintText: 'Nhập số điện thoại',
                         keyboardType: TextInputType.phone,
                       ),

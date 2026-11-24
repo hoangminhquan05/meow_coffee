@@ -90,7 +90,9 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('☕ Đăng nhập thành công!')),
       );
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      // Khách / shipper / nhân viên mỗi vai trò một màn chính.
+      final route = context.read<SessionProvider>().homeRoute;
+      Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       String message;
@@ -207,7 +209,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 label: 'Quên mật khẩu?',
                 onPressed: () => Navigator.pushNamed(context, '/forgot_pass'),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Khách hàng mới?',
+                    style: TextStyle(fontSize: 13, color: AppColors.muted),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, '/register'),
+                    child: const Text(
+                      'Đăng ký tài khoản',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               const Text(
                 'Meow Coffee • Hệ thống quản lý cửa hàng',
                 textAlign: TextAlign.center,

@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/order.dart';
+import '../models/shop_settings.dart';
 import '../utils/formatters.dart';
 
 /// Xuất hóa đơn PDF từ một đơn đã lưu (L7). Font mặc định của gói pdf
@@ -27,7 +28,7 @@ class InvoicePdfService {
     return buf.toString();
   }
 
-  static Future<File> generateAndSave(Order order) async {
+  static Future<File> generateAndSave(Order order, ShopSettings shop) async {
     final pdf = pw.Document();
     final bold = pw.TextStyle(fontWeight: pw.FontWeight.bold);
 
@@ -54,9 +55,10 @@ class InvoicePdfService {
               child: pw.Text('(DON DA HUY)', style: bold),
             ),
           pw.SizedBox(height: 12),
-          pw.Text('MEOW COFFEE', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
-          pw.Text('Dia chi: 83 Hai Ba Trung, Hoan Kiem, TP.Ha Noi'),
-          pw.Text('Dien thoai: 032 8386 66'),
+          pw.Text(_t(shop.name).toUpperCase(),
+              style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+          if (shop.address.isNotEmpty) pw.Text('Dia chi: ${_t(shop.address)}'),
+          if (shop.phone.isNotEmpty) pw.Text('Dien thoai: ${shop.phone}'),
           pw.Divider(),
           pw.Text('Loai don: ${_t(order.fulfillmentLabel)}'),
           pw.Text('Thu ngan: ${_t(order.seller?.name ?? '')}'),
