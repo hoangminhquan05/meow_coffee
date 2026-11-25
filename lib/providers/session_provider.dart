@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/enums.dart';
+import '../core/route_guard.dart' as route_guard;
 import '../core/firestore_paths.dart';
 import '../models/order.dart';
 import '../models/user_model.dart';
@@ -48,16 +49,7 @@ class SessionProvider extends ChangeNotifier {
   /// Màn chính theo vai trò.
   String get homeRoute => homeRouteFor(_user?.role);
 
-  static String homeRouteFor(UserRole? role) {
-    switch (role) {
-      case UserRole.customer:
-        return '/customer';
-      case UserRole.shipper:
-        return '/shipper';
-      default:
-        return '/home';
-    }
-  }
+  static String homeRouteFor(UserRole? role) => route_guard.homeRouteFor(role);
 
   void _onAuthChanged(User? authUser) {
     _userSub?.cancel();

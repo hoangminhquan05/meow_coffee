@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'config/env_config.dart';
 import 'core/enums.dart';
+import 'core/route_guard.dart';
 import 'models/order.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
@@ -142,6 +143,16 @@ class MeowCoffeeApp extends StatelessWidget {
         darkTheme: AppTheme.darkTheme,
         initialRoute: '/login',
         onGenerateRoute: (settings) {
+          // Mở màn không thuộc vai trò mình → về trang chủ của vai trò đó.
+          final navContext = _navigatorKey.currentContext;
+          final role = navContext == null
+              ? null
+              : Provider.of<SessionProvider>(navContext, listen: false).user?.role;
+          final redirect = guardRoute(settings.name, role);
+          if (redirect != null) {
+            debugPrint('Route ${settings.name} không dành cho $role → $redirect');
+            settings = RouteSettings(name: redirect);
+          }
           switch (settings.name) {
             case '/login':
               return MaterialPageRoute(builder: (_) => const LoginScreen());

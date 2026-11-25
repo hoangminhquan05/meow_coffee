@@ -151,7 +151,10 @@ export class Firestore {
     const res = (await this.call(`${this.base}:batchGet`, {
       method: 'POST',
       body: JSON.stringify({ documents: paths.map((p) => this.docName(p)) }),
-    })) as { found?: { name: string; fields?: Record<string, FsValue> }; missing?: string }[];
+    })) as {
+      found?: { name: string; fields?: Record<string, FsValue>; updateTime?: string };
+      missing?: string;
+    }[];
     const byName = new Map<string, FsDoc>();
     for (const r of res) {
       if (r.found) {
@@ -159,6 +162,8 @@ export class Firestore {
           name: r.found.name,
           id: r.found.name.split('/').pop()!,
           data: decodeFields(r.found.fields ?? {}),
+          // Cần cho điều kiện ghi "doc chưa đổi" (currentDocument.updateTime).
+          updateTime: r.found.updateTime,
         });
       }
     }

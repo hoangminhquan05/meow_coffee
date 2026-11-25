@@ -151,7 +151,11 @@ export async function handleShift(
         update: { name: db.docName(statusPath), fields: encodeFields(statusFields) },
         updateMask: { fieldPaths: Object.keys(statusFields) },
         // Không vào ca 2 lần nếu 2 máy bấm cùng lúc.
-        currentDocument: status?.updateTime ? { updateTime: status.updateTime } : { exists: false },
+        currentDocument: status
+          ? status.updateTime
+            ? { updateTime: status.updateTime }
+            : { exists: true }
+          : { exists: false },
       },
     ]);
     return { on_shift: true, shift_id: shiftId, shippers_on_shift: await refreshShopLive(db) };

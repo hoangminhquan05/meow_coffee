@@ -4,8 +4,10 @@ import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 import '../../config/env_config.dart';
+import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
 
@@ -234,9 +236,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 height: 48,
                 onPressed: () {
                   Navigator.pop(dialogContext);
+                  // Về trang chủ đúng vai trò (khách / shipper / nhân viên).
                   Navigator.pushNamedAndRemoveUntil(
                     context,
-                    '/home',
+                    context.read<SessionProvider>().homeRoute,
                     (route) => false,
                   );
                 },
