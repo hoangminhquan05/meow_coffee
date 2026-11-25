@@ -4,7 +4,8 @@
 //   POST /orders/{id}/cancel             khách hủy đơn khi quán chưa xác nhận
 //   POST /webhooks/sepay                 SePay báo tiền vào (header Authorization: Apikey …)
 //   POST /admin/payments/{id}/resolve    admin xử lý giao dịch cần kiểm tra
-//   cron mỗi phút                         hủy đơn VietQR quá hạn thanh toán
+//   POST /shipper/shift                  shipper bắt đầu / kết thúc ca
+//   cron mỗi phút                         hủy đơn VietQR quá hạn; kết thúc ca shipper mất GPS
 import { AuthError, verifyIdToken, type FirebaseUserClaims } from './firebase/idToken';
 import { Firestore, FirestoreError } from './firebase/firestore';
 import { cancelOrder } from './orders/cancelOrder';
@@ -13,6 +14,7 @@ import { OrderRuleError } from './orders/rules';
 import { expireUnpaidOrders } from './payments/expire';
 import { resolvePayment } from './payments/resolve';
 import { checkSepayAuth, handleSepayWebhook, type SepayPayload } from './payments/sepay';
+import { endStaleShifts, handleShift } from './shipper/shift';
 
 export interface Env {
   FIREBASE_PROJECT_ID: string;
@@ -90,6 +92,12 @@ export default {
         return json(200, await resolvePayment(db(env), claims, decodeURIComponent(resolveMatch[1]), body));
       }
 
+      if (request.method === 'POST' && url.pathname === '/shipper/shift') {
+        const claims = await requireUser(request, env);
+        const body = await request.json().catch(() => null);
+        return json(200, await handleShift(db(env), claims, body));
+      }
+
       return error(404, 'not_found', 'Không tìm thấy');
     } catch (e) {
       if (e instanceof AuthError) return error(401, 'unauthenticated', e.message);
@@ -104,6 +112,11 @@ export default {
     ctx.waitUntil(
       expireUnpaidOrders(db(env)).then((n) => {
         if (n > 0) console.log(`expired ${n} unpaid order(s)`);
+      }),
+    );
+    ctx.waitUntil(
+      endStaleShifts(db(env)).then((n) => {
+        if (n > 0) console.log(`auto-ended ${n} shipper shift(s)`);
       }),
     );
   },

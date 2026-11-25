@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/enums.dart';
 import '../../models/order.dart';
 import '../../providers/online_orders_provider.dart';
+import '../../providers/shop_settings_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -70,6 +71,17 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
           title: const Text('Đơn Online'),
           automaticallyImplyLeading: false,
           backgroundColor: AppColors.bg,
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/shippers_live'),
+              icon: const Icon(Icons.delivery_dining_rounded, color: AppColors.brand),
+              label: Text(
+                'Shipper (${context.watch<ShopSettingsProvider>().shippersOnShift ?? 0})',
+                style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,

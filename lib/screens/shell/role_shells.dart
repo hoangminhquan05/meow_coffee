@@ -7,6 +7,7 @@ import '../home/home_screen.dart';
 import '../online/customer_cart_screen.dart';
 import '../online/my_orders_screen.dart';
 import '../product/product_screen.dart';
+import '../shipper/shipper_home_screen.dart';
 import 'account_screen.dart';
 
 /// Khung app khách: Trang chủ · Thực đơn · Giỏ · Đơn của tôi · Tài khoản.
@@ -72,7 +73,7 @@ class _CustomerShellState extends State<CustomerShell> {
   }
 }
 
-/// Khung app shipper: Giao hàng (bước 8–9) · Tài khoản.
+/// Khung app shipper: Giao hàng (ca + GPS, bước 8) · Tài khoản.
 class ShipperShell extends StatefulWidget {
   const ShipperShell({super.key});
 
@@ -84,11 +85,7 @@ class _ShipperShellState extends State<ShipperShell> {
   int _index = 0;
 
   static const _pages = <Widget>[
-    ComingSoonScreen(
-      title: 'Giao Hàng',
-      icon: Icons.delivery_dining_outlined,
-      message: 'Nhận và giao đơn online sẽ có ở đây.',
-    ),
+    ShipperHomeScreen(),
     AccountScreen(),
   ];
 
@@ -111,65 +108,6 @@ class _ShipperShellState extends State<ShipperShell> {
               selectedIcon: Icon(Icons.person_rounded),
               label: 'Tài khoản'),
         ],
-      ),
-    );
-  }
-}
-
-class ComingSoonScreen extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String message;
-
-  const ComingSoonScreen({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: Text(title),
-        automaticallyImplyLeading: false,
-        backgroundColor: AppColors.bg,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: const BoxDecoration(
-                  color: AppColors.soft,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 40, color: AppColors.brand),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Sắp ra mắt',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

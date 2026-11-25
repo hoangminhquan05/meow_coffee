@@ -30,7 +30,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection(FsCollections.users)
-          .where('role', isEqualTo: UserRole.staff.value)
+          .where(
+            'role',
+            whereIn: [UserRole.staff.value, UserRole.shipper.value],
+          )
           .get();
       if (!mounted) return;
       setState(() {
@@ -52,7 +55,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       context,
       title: lock ? 'Khóa tài khoản' : 'Mở khóa tài khoản',
       message: lock
-          ? 'Khóa “${user.name}”? Nhân viên sẽ bị đăng xuất và không đăng nhập được nữa. Lịch sử đơn vẫn giữ nguyên.'
+          ? 'Khóa “${user.name}”? Người này sẽ bị đăng xuất và không đăng nhập được nữa. Lịch sử đơn vẫn giữ nguyên.'
           : 'Mở khóa cho “${user.name}” đăng nhập lại?',
       confirmLabel: lock ? 'Khóa' : 'Mở khóa',
       cancelLabel: 'Hủy',
@@ -73,144 +76,170 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(lock
-              ? 'Đã khóa tài khoản ${user.name}'
-              : 'Đã mở khóa tài khoản ${user.name}'),
+          content: Text(
+            lock
+                ? 'Đã khóa tài khoản ${user.name}'
+                : 'Đã mở khóa tài khoản ${user.name}',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi cập nhật tài khoản: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Lỗi cập nhật tài khoản: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: const MeowHeader(title: 'Quản Lý Nhân Viên'),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
-            )
-          : RefreshIndicator(
-              color: AppColors.brand,
-              onRefresh: _loadStaffList,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-                children: [
-                  const MeowEditorialHero(
-                    eyebrow: 'MEOW COFFEE',
-                    title: 'Đội ngũ Meow Coffee',
-                    subtitle: 'Thông tin nhân viên và vai trò trong cửa hàng.',
-                  ),
-                  const SizedBox(height: 16),
-                  MeowPrimaryButton(
-                    label: 'Thêm nhân viên',
-                    icon: Icons.person_add_alt_1_rounded,
-                    onPressed: () async {
-                      await Navigator.pushNamed(context, '/add_staff');
-                      _loadStaffList();
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  if (_staffList.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 36),
-                      child: Center(
-                        child: Text(
-                          'Chưa có nhân viên nào',
-                          style: TextStyle(color: AppColors.muted),
-                        ),
-                      ),
-                    )
-                  else
-                    for (final user in _staffList) ...[
-                      MeowCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ClipOval(
-                              child: SizedBox(
-                                width: 52,
-                                height: 52,
-                                child: user.avtUrl.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: user.avtUrl,
-                                        fit: BoxFit.cover,
-                                        errorWidget: (_, _, _) => Image.asset(
-                                          'assets/images/user_df.jpg',
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
-                                    : Image.asset(
-                                        'assets/images/user_df.jpg',
-                                        fit: BoxFit.cover,
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    user.name,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.ink,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    user.email,
-                                    style: const TextStyle(
-                                      fontSize: 12.5,
-                                      color: AppColors.muted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${user.phone} • ${user.role.label}'
-                                    '${user.isActive ? '' : ' • ĐÃ KHÓA'}',
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: user.isActive
-                                          ? AppColors.muted
-                                          : AppColors.danger,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  GestureDetector(
-                                    onTap: () => _toggleLock(user),
-                                    child: Text(
-                                      user.isActive
-                                          ? 'Khóa tài khoản'
-                                          : 'Mở khóa tài khoản',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: user.isActive
-                                            ? AppColors.danger
-                                            : AppColors.success,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                ],
-              ),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: const MeowHeader(title: 'Quản Lý Nhân Viên'),
+        body: Column(
+          children: [
+            const TabBar(
+              labelColor: AppColors.brand,
+              indicatorColor: AppColors.brand,
+              unselectedLabelColor: AppColors.muted,
+              tabs: [
+                Tab(text: 'Nhân viên'),
+                Tab(text: 'Shipper'),
+              ],
             ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.brand),
+                    )
+                  : TabBarView(
+                      children: [
+                        _buildList(UserRole.staff),
+                        _buildList(UserRole.shipper),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildList(UserRole role) {
+    final users = _staffList.where((u) => u.role == role).toList();
+    final isShipper = role == UserRole.shipper;
+    return RefreshIndicator(
+      color: AppColors.brand,
+      onRefresh: _loadStaffList,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        children: [
+          MeowPrimaryButton(
+            label: isShipper ? 'Thêm shipper' : 'Thêm nhân viên',
+            icon: isShipper
+                ? Icons.delivery_dining_rounded
+                : Icons.person_add_alt_1_rounded,
+            onPressed: () async {
+              await Navigator.pushNamed(context, '/add_staff', arguments: role);
+              _loadStaffList();
+            },
+          ),
+          const SizedBox(height: 18),
+          if (users.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              child: Center(
+                child: Text(
+                  isShipper ? 'Chưa có shipper nào' : 'Chưa có nhân viên nào',
+                  style: const TextStyle(color: AppColors.muted),
+                ),
+              ),
+            )
+          else
+            for (final user in users) ...[
+              MeowCard(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: user.avtUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: user.avtUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, _, _) => Image.asset(
+                                  'assets/images/user_df.jpg',
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Image.asset(
+                                'assets/images/user_df.jpg',
+                                fit: BoxFit.cover,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            user.email,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${user.phone} • ${user.role.label}'
+                            '${user.isActive ? '' : ' • ĐÃ KHÓA'}',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: user.isActive
+                                  ? AppColors.muted
+                                  : AppColors.danger,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          GestureDetector(
+                            onTap: () => _toggleLock(user),
+                            child: Text(
+                              user.isActive
+                                  ? 'Khóa tài khoản'
+                                  : 'Mở khóa tài khoản',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: user.isActive
+                                    ? AppColors.danger
+                                    : AppColors.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+        ],
+      ),
     );
   }
 }

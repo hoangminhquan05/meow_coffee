@@ -13,7 +13,12 @@ class ShopSettingsProvider extends ChangeNotifier {
   static DocumentReference<Map<String, dynamic>> get docRef =>
       FirebaseFirestore.instance.collection(FsCollections.settings).doc('shop');
 
+  static DocumentReference<Map<String, dynamic>> get liveRef =>
+      FirebaseFirestore.instance.collection(FsCollections.settings).doc('shop_live');
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _liveSub;
+  int? _shippersOnShift;
   ShopSettings _settings = ShopSettings.defaults;
   bool _exists = false;
   bool _loaded = false;
@@ -26,12 +31,29 @@ class ShopSettingsProvider extends ChangeNotifier {
   bool get isLoaded => _loaded;
   Object? get error => _error;
 
+  /// Số shipper đang trong ca (`settings/shop_live`, Worker cập nhật);
+  /// null khi chưa tải được.
+  int? get shippersOnShift => _shippersOnShift;
+
+  /// Lý do chặn đặt đơn vì không có shipper (O30), khi admin bật yêu cầu này.
+  String? get noShipperReason =>
+      _settings.requireShipperOnShift && (_shippersOnShift ?? 0) == 0
+          ? 'Hiện chưa có shipper, vui lòng quay lại sau'
+          : null;
+
   /// Gọi khi đăng nhập (true) / đăng xuất (false). Chạy sau frame hiện tại
   /// vì được gọi từ ProxyProvider.update (đang build).
   void setActive(bool active) => scheduleMicrotask(() => _setActive(active));
 
   void _setActive(bool active) {
     if (active && _sub == null) {
+      _liveSub = liveRef.snapshots().listen(
+        (doc) {
+          _shippersOnShift = (doc.data()?['shippers_on_shift'] as num?)?.round() ?? 0;
+          notifyListeners();
+        },
+        onError: (Object e) => debugPrint('ShopSettingsProvider live error: $e'),
+      );
       _sub = docRef.snapshots().listen(
         (doc) {
           _exists = doc.exists;
@@ -52,6 +74,9 @@ class ShopSettingsProvider extends ChangeNotifier {
     } else if (!active && _sub != null) {
       _sub!.cancel();
       _sub = null;
+      _liveSub?.cancel();
+      _liveSub = null;
+      _shippersOnShift = null;
       _settings = ShopSettings.defaults;
       _exists = false;
       _loaded = false;
@@ -76,6 +101,7 @@ class ShopSettingsProvider extends ChangeNotifier {
   @override
   void dispose() {
     _sub?.cancel();
+    _liveSub?.cancel();
     super.dispose();
   }
 }

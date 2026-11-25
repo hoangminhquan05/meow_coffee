@@ -157,7 +157,7 @@ class ShopSettings {
   final ShippingFeeConfig shippingFee;
   final int paymentTimeoutMin;
 
-  /// Chặn đặt đơn khi không có shipper trong ca (O30). Tạm tắt đến bước 8.
+  /// Chặn đặt đơn khi không có shipper trong ca (O30). Admin bật khi quán đủ người.
   final bool requireShipperOnShift;
   final DispatchConfig dispatch;
   final DeliveryFailureConfig deliveryFailure;

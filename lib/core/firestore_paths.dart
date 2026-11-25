@@ -11,4 +11,6 @@ class FsCollections {
   static const counters = 'counters';
   static const settings = 'settings';
   static const carts = 'carts';
+  static const shipperStatus = 'shipper_status';
+  static const shipperShifts = 'shipper_shifts';
 }

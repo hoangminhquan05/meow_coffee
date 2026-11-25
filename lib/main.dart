@@ -8,6 +8,7 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 
 import 'config/env_config.dart';
+import 'core/enums.dart';
 import 'models/order.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
@@ -20,6 +21,7 @@ import 'screens/admin/payment_reviews_screen.dart';
 import 'screens/admin/refunds_screen.dart';
 import 'screens/staff/online_order_detail_screen.dart';
 import 'screens/staff/online_orders_screen.dart';
+import 'screens/staff/shippers_live_screen.dart';
 import 'utils/formatters.dart';
 import 'screens/admin/shop_settings_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -208,7 +210,10 @@ class MeowCoffeeApp extends StatelessWidget {
                 builder: (_) => const StaffManagementScreen(),
               );
             case '/add_staff':
-              return MaterialPageRoute(builder: (_) => const AddStaffScreen());
+              final role = settings.arguments as UserRole? ?? UserRole.staff;
+              return MaterialPageRoute(
+                builder: (_) => AddStaffScreen(initialRole: role),
+              );
             case '/bannerManagement':
               return MaterialPageRoute(
                 builder: (_) => const BannerManagementScreen(),
@@ -252,6 +257,10 @@ class MeowCoffeeApp extends StatelessWidget {
               final orderId = settings.arguments as String? ?? '';
               return MaterialPageRoute(
                 builder: (_) => OnlineOrderDetailScreen(orderId: orderId),
+              );
+            case '/shippers_live':
+              return MaterialPageRoute(
+                builder: (_) => const ShippersLiveScreen(),
               );
             case '/refunds':
               return MaterialPageRoute(builder: (_) => const RefundsScreen());

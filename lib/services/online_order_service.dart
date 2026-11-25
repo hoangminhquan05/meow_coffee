@@ -51,7 +51,8 @@ const customerCancelReasons = [
 class OnlineOrderService {
   OnlineOrderService._();
 
-  static Future<Map<String, dynamic>> _post(
+  /// Gọi một endpoint POST của Worker kèm Firebase ID token (dùng chung).
+  static Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body, {
     required int okStatus,
@@ -102,7 +103,7 @@ class OnlineOrderService {
     required PaymentMethod method,
     String note = '',
   }) async {
-    final body = await _post(
+    final body = await post(
       '/orders',
       {
         'items': [for (final i in items) i.toMap()],
@@ -126,12 +127,12 @@ class OnlineOrderService {
 
   /// `POST /orders/{id}/cancel` – khách hủy khi quán chưa xác nhận (O15).
   static Future<void> cancel(String orderId, String reason) async {
-    await _post('/orders/$orderId/cancel', {'reason': reason.trim()}, okStatus: 200);
+    await post('/orders/$orderId/cancel', {'reason': reason.trim()}, okStatus: 200);
   }
 
   /// Admin gắn giao dịch lệch vào một đơn (đơn thành đã trả, chờ xác nhận).
   static Future<void> attachPayment(String txId, String orderCode, {String note = ''}) async {
-    await _post(
+    await post(
       '/admin/payments/$txId/resolve',
       {'action': 'attach', 'order_code': orderCode.trim().toUpperCase(), 'note': note.trim()},
       okStatus: 200,
@@ -140,7 +141,7 @@ class OnlineOrderService {
 
   /// Admin đánh dấu đã xử lý ngoài app (hoàn tiền tay / bỏ qua) kèm ghi chú.
   static Future<void> dismissPayment(String txId, String note) async {
-    await _post(
+    await post(
       '/admin/payments/$txId/resolve',
       {'action': 'dismiss', 'note': note.trim()},
       okStatus: 200,

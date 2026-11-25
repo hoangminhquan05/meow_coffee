@@ -9,7 +9,8 @@ API bán online cho Meow Coffee – xem [docs/ke-hoach-ban-online.md](../docs/ke
 | `POST /orders/{id}/cancel` | Khách hủy đơn khi quán chưa xác nhận |
 | `POST /webhooks/sepay` | SePay báo tiền vào (header `Authorization: Apikey <SEPAY_API_KEY>`) |
 | `POST /admin/payments/{id}/resolve` | Admin gắn giao dịch lệch vào đơn / đánh dấu đã xử lý |
-| cron mỗi phút | Hủy đơn VietQR quá hạn chuyển khoản |
+| `POST /shipper/shift` | Shipper bắt đầu ca `{action:"start", location:{lat,lng}}` / kết thúc ca `{action:"end"}` |
+| cron mỗi phút | Hủy đơn VietQR quá hạn chuyển khoản; tự kết thúc ca shipper mất GPS > 15 phút |
 
 Bí mật: `FIREBASE_SERVICE_ACCOUNT`, `SEPAY_API_KEY` (xem docs/huong-dan-cai-dat.md Phần G).
 

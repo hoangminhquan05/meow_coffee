@@ -73,7 +73,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CustomerCartProvider>();
-    final shop = context.watch<ShopSettingsProvider>().settings;
+    final shopProvider = context.watch<ShopSettingsProvider>();
+    final shop = shopProvider.settings;
     final user = context.watch<SessionProvider>().user;
 
     return Scaffold(
@@ -102,7 +103,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               final total = cart.subtotal + fee;
 
               // Lý do chặn đặt hàng (theo thứ tự ưu tiên).
-              String? blocker = shop.closedReason(DateTime.now());
+              String? blocker = shop.closedReason(DateTime.now()) ??
+                  shopProvider.noShipperReason;
               VoidCallback? fix;
               String? fixLabel;
               if (blocker == null && !(user?.isVerified ?? false)) {

@@ -410,8 +410,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                   title: const Text('Yêu cầu có shipper trong ca',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: const Text(
-                    'Bật thì chặn đặt đơn khi không có shipper nào đang làm. '
-                    'Tạm tắt cho đến khi có chức năng shipper.',
+                    'Bật thì chặn đặt đơn khi không có shipper nào đang trong ca '
+                    '(nên bật khi quán vào ca có đủ người bán và shipper).',
                     style: TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                   value: _requireShipper,

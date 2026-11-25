@@ -40,6 +40,35 @@ service cloud.firestore {
         && request.resource.data.updated_by.id == request.auth.uid;
     }
 
+    // Số shipper đang trong ca (Worker ghi) – khách đọc để biết có đặt đơn được không (O30).
+    match /settings/shop_live {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
+    // Trạng thái shipper (bước 8). Vào/ra ca qua Worker (POST /shipper/shift);
+    // trong ca shipper tự gửi GPS: chỉ đổi vị trí, thời điểm = giờ server.
+    match /shipper_status/{uid} {
+      allow read: if isSeller() || (isActive() && request.auth.uid == uid);
+      allow update: if isActive() && request.auth.uid == uid
+        && me().role == 'shipper'
+        && resource.data.on_shift == true
+        && onlyChanges(['location', 'location_updated_at'])
+        && request.resource.data.location.lat is number
+        && request.resource.data.location.lng is number
+        && request.resource.data.location.lat >= -90 && request.resource.data.location.lat <= 90
+        && request.resource.data.location.lng >= -180 && request.resource.data.location.lng <= 180
+        && request.resource.data.location_updated_at == request.time;
+      allow create, delete: if false;
+    }
+
+    // Nhật ký ca shipper (Worker ghi) – cho báo cáo của admin.
+    match /shipper_shifts/{id} {
+      allow read: if isAdmin()
+        || (isActive() && resource.data.shipper.id == request.auth.uid);
+      allow write: if false;
+    }
+
     match /banners/{id} {
       allow read: if isActive();
       allow write: if isAdmin();

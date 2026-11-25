@@ -14,8 +14,12 @@ import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
 
+/// Admin tạo tài khoản nhân viên hoặc shipper (O18), gửi mật khẩu tạm qua email.
 class AddStaffScreen extends StatefulWidget {
-  const AddStaffScreen({super.key});
+  /// Vai trò chọn sẵn (mở từ tab Shipper thì là shipper).
+  final UserRole initialRole;
+
+  const AddStaffScreen({super.key, this.initialRole = UserRole.staff});
 
   @override
   State<AddStaffScreen> createState() => _AddStaffScreenState();
@@ -26,6 +30,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
 
+  late UserRole _role = widget.initialRole;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -125,7 +130,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
         uid: uid,
         email: email,
         name: name,
-        role: UserRole.staff,
+        role: _role,
         phone: phone,
       );
 
@@ -144,7 +149,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Thêm nhân viên thành công! Mật khẩu đã gửi đến email $email',
+              'Đã thêm ${_role.label.toLowerCase()} $name! Mật khẩu đã gửi đến email $email',
             ),
           ),
         );
@@ -153,7 +158,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
         if (!mounted) return;
         setState(() {
           _errorMessage =
-              'Thêm nhân viên thành công nhưng gửi email thất bại: $emailErr';
+              'Đã tạo tài khoản nhưng gửi email thất bại: $emailErr';
         });
       }
     } on FirebaseAuthException catch (e) {
@@ -176,7 +181,9 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: const MeowHeader(title: 'Thêm Nhân Viên'),
+      appBar: MeowHeader(
+        title: _role == UserRole.shipper ? 'Thêm Shipper' : 'Thêm Nhân Viên',
+      ),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -186,15 +193,42 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
             children: [
               const MeowEditorialHero(
                 eyebrow: 'MEOW COFFEE',
-                title: 'Thêm nhân viên mới',
-                subtitle:
-                    'Tạo tài khoản nhân viên và gửi mật khẩu tạm qua email.',
+                title: 'Thêm tài khoản mới',
+                subtitle: 'Tạo tài khoản nhân viên bán hàng hoặc shipper và gửi mật khẩu tạm qua email.',
               ),
               const SizedBox(height: 20),
+              const Text(
+                'VAI TRÒ',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<UserRole>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: UserRole.staff,
+                    icon: Icon(Icons.storefront_outlined),
+                    label: Text('Nhân viên'),
+                  ),
+                  ButtonSegment(
+                    value: UserRole.shipper,
+                    icon: Icon(Icons.delivery_dining_outlined),
+                    label: Text('Shipper'),
+                  ),
+                ],
+                selected: {_role},
+                onSelectionChanged: (v) => setState(() => _role = v.first),
+              ),
+              const SizedBox(height: 16),
               MeowFormField(
-                label: 'TÊN NHÂN VIÊN',
+                label: 'HỌ VÀ TÊN',
                 controller: _nameController,
-                hintText: 'Nhập họ và tên nhân viên',
+                hintText: 'Nhập họ và tên',
               ),
               const SizedBox(height: 16),
               MeowFormField(
@@ -230,7 +264,9 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
               ],
               const SizedBox(height: 22),
               MeowPrimaryButton(
-                label: 'Thêm nhân viên',
+                label: _role == UserRole.shipper
+                    ? 'Thêm shipper'
+                    : 'Thêm nhân viên',
                 isLoading: _isLoading,
                 onPressed: _submit,
               ),
