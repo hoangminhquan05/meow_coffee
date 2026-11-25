@@ -165,6 +165,33 @@ export class Firestore {
     return paths.map((p) => byName.get(this.docName(p)) ?? null);
   }
 
+  /** Lấy các doc trong collection thỏa field == value (tối đa `limit`). */
+  async findWhere(
+    collection: string,
+    field: string,
+    value: unknown,
+    limit = 50,
+  ): Promise<FsDoc[]> {
+    const res = (await this.call(`${this.base}:runQuery`, {
+      method: 'POST',
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: collection }],
+          where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: encodeValue(value) } },
+          limit,
+        },
+      }),
+    })) as { document?: { name: string; fields?: Record<string, FsValue>; updateTime?: string } }[];
+    return res
+      .filter((r) => r.document)
+      .map((r) => ({
+        name: r.document!.name,
+        id: r.document!.name.split('/').pop()!,
+        data: decodeFields(r.document!.fields ?? {}),
+        updateTime: r.document!.updateTime,
+      }));
+  }
+
   /** Đếm doc trong collection thỏa field == value. */
   async countWhere(collection: string, field: string, value: unknown): Promise<number> {
     const res = (await this.call(`${this.base}:runAggregationQuery`, {

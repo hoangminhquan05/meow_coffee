@@ -96,6 +96,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           onTap: () => Navigator.pushNamed(context, '/shop_settings'),
         ),
         _ProfileMenuItem(
+          title: 'Giao dịch cần kiểm tra',
+          subtitle: 'Chuyển khoản VietQR không khớp đơn',
+          icon: Icons.account_balance_outlined,
+          isAdminOnly: true,
+          onTap: () => Navigator.pushNamed(context, '/payment_reviews'),
+        ),
+        _ProfileMenuItem(
+          title: 'Cần hoàn tiền',
+          subtitle: 'Đơn đã trả trước bị hủy / bỏ món',
+          icon: Icons.currency_exchange_rounded,
+          isAdminOnly: true,
+          onTap: () => Navigator.pushNamed(context, '/refunds'),
+        ),
+        _ProfileMenuItem(
           title: 'Quản lý banner',
           subtitle: 'Hình ảnh quảng bá trang chủ',
           icon: Icons.collections_outlined,
@@ -127,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 3),
+      bottomNavigationBar: const BottomNavBar(currentIndex: 4),
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.brand,

@@ -105,6 +105,12 @@ class Order {
   /// Hạn chuyển khoản VietQR (đơn `awaiting_payment`).
   final DateTime? paymentExpiresAt;
 
+  /// Món quán đã bỏ khỏi đơn (O16).
+  final List<ItemChange> itemChanges;
+
+  /// Hoàn tiền thủ công cho đơn đã trả trước (O32); null nếu không cần.
+  final OrderRefund? refund;
+
   const Order({
     required this.id,
     required this.orderCode,
@@ -129,7 +135,12 @@ class Order {
     this.delivery,
     this.statusHistory = const [],
     this.paymentExpiresAt,
+    this.itemChanges = const [],
+    this.refund,
   });
+
+  /// Phí giao hàng (0 nếu không phải đơn giao).
+  int get deliveryFee => delivery?.fee ?? 0;
 
   bool get isCancelled => status == OrderStatus.cancelled;
   bool get isOnline => channel == OrderChannel.online;
@@ -194,6 +205,13 @@ class Order {
           .toList(),
       paymentExpiresAt: map['payment'] is Map
           ? toDate((map['payment'] as Map)['expires_at'])
+          : null,
+      itemChanges: (map['item_changes'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((m) => ItemChange.fromMap(Map<String, dynamic>.from(m)))
+          .toList(),
+      refund: map['refund'] is Map
+          ? OrderRefund.fromMap(Map<String, dynamic>.from(map['refund']))
           : null,
     );
   }
@@ -260,8 +278,14 @@ class StatusEntry {
   final OrderStatus status;
   final DateTime? at;
   final String byRole;
+  final String byName;
 
-  const StatusEntry({required this.status, required this.at, required this.byRole});
+  const StatusEntry({
+    required this.status,
+    required this.at,
+    required this.byRole,
+    this.byName = '',
+  });
 
   factory StatusEntry.fromMap(Map<String, dynamic> m) {
     final at = m['at'];
@@ -270,6 +294,78 @@ class StatusEntry {
       status: OrderStatus.fromValue(m['status'] as String?),
       at: at is Timestamp ? at.toDate() : null,
       byRole: by is Map ? (by['role']?.toString() ?? '') : '',
+      byName: by is Map ? (by['name']?.toString() ?? '') : '',
+    );
+  }
+}
+
+/// Một lần quán bỏ món (cả dòng hoặc bớt số lượng) – O16.
+class ItemChange {
+  final DateTime? at;
+  final PersonRef by;
+  final String name;
+  final String size;
+  final int quantity;
+  final int amount;
+  final String reason;
+
+  const ItemChange({
+    required this.at,
+    required this.by,
+    required this.name,
+    required this.size,
+    required this.quantity,
+    required this.amount,
+    required this.reason,
+  });
+
+  String get displayName =>
+      size == Product.defaultSize ? name : '$name ($size)';
+
+  factory ItemChange.fromMap(Map<String, dynamic> m) {
+    final removed = m['removed'] is Map ? m['removed'] as Map : const {};
+    final at = m['at'];
+    return ItemChange(
+      at: at is Timestamp ? at.toDate() : null,
+      by: PersonRef.fromMap(m['by']),
+      name: removed['name']?.toString() ?? '',
+      size: removed['size']?.toString() ?? Product.defaultSize,
+      quantity: (removed['quantity'] as num?)?.round() ?? 0,
+      amount: (removed['line_total'] as num?)?.round() ?? 0,
+      reason: m['reason']?.toString() ?? '',
+    );
+  }
+}
+
+/// Hoàn tiền thủ công (O32): `amount` là số còn phải hoàn khi `done = false`.
+class OrderRefund {
+  final bool required;
+  final int amount;
+  final bool done;
+  final PersonRef? doneBy;
+  final DateTime? doneAt;
+  final String note;
+
+  const OrderRefund({
+    required this.required,
+    required this.amount,
+    required this.done,
+    this.doneBy,
+    this.doneAt,
+    this.note = '',
+  });
+
+  bool get isPending => required && !done;
+
+  factory OrderRefund.fromMap(Map<String, dynamic> m) {
+    final at = m['done_at'];
+    return OrderRefund(
+      required: m['required'] == true,
+      amount: (m['amount'] as num?)?.round() ?? 0,
+      done: m['done'] == true,
+      doneBy: m['done_by'] is Map ? PersonRef.fromMap(m['done_by']) : null,
+      doneAt: at is Timestamp ? at.toDate() : null,
+      note: m['note']?.toString() ?? '',
     );
   }
 }

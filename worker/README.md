@@ -6,6 +6,12 @@ API bán online cho Meow Coffee – xem [docs/ke-hoach-ban-online.md](../docs/ke
 |---|---|
 | `GET /health` | Kiểm tra Worker đang chạy |
 | `POST /orders` | Khách tạo đơn online (header `Authorization: Bearer <Firebase ID token>`) |
+| `POST /orders/{id}/cancel` | Khách hủy đơn khi quán chưa xác nhận |
+| `POST /webhooks/sepay` | SePay báo tiền vào (header `Authorization: Apikey <SEPAY_API_KEY>`) |
+| `POST /admin/payments/{id}/resolve` | Admin gắn giao dịch lệch vào đơn / đánh dấu đã xử lý |
+| cron mỗi phút | Hủy đơn VietQR quá hạn chuyển khoản |
+
+Bí mật: `FIREBASE_SERVICE_ACCOUNT`, `SEPAY_API_KEY` (xem docs/huong-dan-cai-dat.md Phần G).
 
 `POST /orders` body:
 

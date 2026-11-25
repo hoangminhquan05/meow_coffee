@@ -128,4 +128,22 @@ class OnlineOrderService {
   static Future<void> cancel(String orderId, String reason) async {
     await _post('/orders/$orderId/cancel', {'reason': reason.trim()}, okStatus: 200);
   }
+
+  /// Admin gắn giao dịch lệch vào một đơn (đơn thành đã trả, chờ xác nhận).
+  static Future<void> attachPayment(String txId, String orderCode, {String note = ''}) async {
+    await _post(
+      '/admin/payments/$txId/resolve',
+      {'action': 'attach', 'order_code': orderCode.trim().toUpperCase(), 'note': note.trim()},
+      okStatus: 200,
+    );
+  }
+
+  /// Admin đánh dấu đã xử lý ngoài app (hoàn tiền tay / bỏ qua) kèm ghi chú.
+  static Future<void> dismissPayment(String txId, String note) async {
+    await _post(
+      '/admin/payments/$txId/resolve',
+      {'action': 'dismiss', 'note': note.trim()},
+      okStatus: 200,
+    );
+  }
 }

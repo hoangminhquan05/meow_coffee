@@ -16,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/vietqr.dart';
 import '../../widgets/meow_ui.dart';
+import '../../widgets/reason_sheet.dart';
 import 'my_orders_screen.dart' show StatusChip, statusColor;
 
 /// Chi tiết đơn online của khách (bước 5): các bước trạng thái, mã VietQR +
@@ -30,13 +31,29 @@ class CustomerOrderDetailScreen extends StatefulWidget {
 }
 
 class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
-  late final Stream<Order?> _stream = OrderService.watchOrder(widget.orderId);
+  // Broadcast vì có 2 nơi nghe: StreamBuilder và bộ theo dõi đổi trạng thái.
+  late final Stream<Order?> _stream =
+      OrderService.watchOrder(widget.orderId).asBroadcastStream();
+  late final StreamSubscription<Order?> _paidWatcher;
   Timer? _ticker;
   bool _busy = false;
+  OrderStatus? _lastStatus;
 
   @override
   void initState() {
     super.initState();
+    // Tiền về (SePay) → đơn đổi từ "Chờ thanh toán" sang "Chờ xác nhận": báo khách.
+    _paidWatcher = _stream.listen((o) {
+      if (o == null) return;
+      final prev = _lastStatus;
+      _lastStatus = o.status;
+      if (!mounted || prev == null || prev == o.status) return;
+      if (prev == OrderStatus.awaitingPayment && o.status == OrderStatus.pending) {
+        _toast('Thanh toán thành công – chờ quán xác nhận đơn');
+      } else if (prev == OrderStatus.awaitingPayment && o.status == OrderStatus.cancelled) {
+        _toast('Đơn đã hủy vì quá hạn thanh toán');
+      }
+    });
     // Cập nhật đồng hồ đếm ngược thanh toán.
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -45,6 +62,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
 
   @override
   void dispose() {
+    _paidWatcher.cancel();
     _ticker?.cancel();
     super.dispose();
   }
@@ -53,14 +71,12 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   Future<void> _cancel(Order order) async {
-    final reason = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => const _CancelSheet(),
+    final reason = await showReasonSheet(
+      context,
+      title: 'Lý do hủy đơn',
+      reasons: customerCancelReasons,
+      confirmLabel: 'Xác nhận hủy đơn',
+      cancelLabel: 'Không hủy',
     );
     if (reason == null || !mounted) return;
     setState(() => _busy = true);
@@ -167,6 +183,10 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
               ],
               if (order.status == OrderStatus.cancelled) ...[
                 _CancelledBox(order: order),
+                const SizedBox(height: 12),
+              ],
+              if (order.refund?.required == true) ...[
+                RefundNotice(refund: order.refund!),
                 const SizedBox(height: 12),
               ],
               _Timeline(order: order),
@@ -297,6 +317,36 @@ class _CancelledBox extends StatelessWidget {
           style: const TextStyle(color: AppColors.danger, height: 1.4),
         ),
       );
+}
+
+/// Thông tin hoàn tiền cho đơn đã trả trước (dùng cho cả khách và NV).
+class RefundNotice extends StatelessWidget {
+  final OrderRefund refund;
+
+  const RefundNotice({super.key, required this.refund});
+
+  @override
+  Widget build(BuildContext context) {
+    final done = refund.done;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: done ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        done
+            ? 'Quán đã hoàn ${formatMoney(refund.amount)} lúc ${formatDateTime(refund.doneAt)}'
+            : 'Quán sẽ hoàn ${formatMoney(refund.amount)} cho bạn. '
+                'Quán sẽ liên hệ để xin số tài khoản nhận tiền.',
+        style: TextStyle(
+          height: 1.4,
+          fontWeight: FontWeight.w600,
+          color: done ? AppColors.success : AppColors.warning,
+        ),
+      ),
+    );
+  }
 }
 
 /// Các bước của đơn online; bước hiện tại tô màu, bước đã qua có giờ.
@@ -490,6 +540,12 @@ class _ItemsCard extends StatelessWidget {
           if (order.note.isNotEmpty)
             Text('Ghi chú đơn: ${order.note}',
                 style: const TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic)),
+          for (final c in order.itemChanges)
+            Text(
+              'Quán đã bỏ ${c.displayName} × ${c.quantity} (−${formatMoney(c.amount)})'
+              ' · ${c.reason}',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.danger),
+            ),
           const Divider(),
           _row('Tạm tính', formatMoney(order.subtotal)),
           _row('Phí giao hàng', fee == 0 ? 'Miễn phí' : formatMoney(fee)),
@@ -520,88 +576,4 @@ class _ItemsCard extends StatelessWidget {
           ],
         ),
       );
-}
-
-/// Chọn nhanh lý do hủy; "Khác" thì gõ thêm.
-class _CancelSheet extends StatefulWidget {
-  const _CancelSheet();
-
-  @override
-  State<_CancelSheet> createState() => _CancelSheetState();
-}
-
-class _CancelSheetState extends State<_CancelSheet> {
-  String? _reason;
-  final _other = TextEditingController();
-
-  @override
-  void dispose() {
-    _other.dispose();
-    super.dispose();
-  }
-
-  String? get _result {
-    if (_reason == null) return null;
-    if (_reason == 'Khác') {
-      final t = _other.text.trim();
-      return t.isEmpty ? null : t;
-    }
-    return _reason;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Lý do hủy đơn',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              RadioGroup<String>(
-                groupValue: _reason,
-                onChanged: (v) => setState(() => _reason = v),
-                child: Column(
-                  children: [
-                    for (final r in customerCancelReasons)
-                      RadioListTile<String>(
-                        value: r,
-                        title: Text(r),
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                      ),
-                  ],
-                ),
-              ),
-              if (_reason == 'Khác')
-                TextField(
-                  controller: _other,
-                  autofocus: true,
-                  maxLength: 200,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(labelText: 'Lý do của bạn'),
-                ),
-              const SizedBox(height: 12),
-              MeowPrimaryButton(
-                label: 'Xác nhận hủy đơn',
-                solidColor: AppColors.danger,
-                onPressed: _result == null ? null : () => Navigator.pop(context, _result),
-              ),
-              const SizedBox(height: 8),
-              MeowSecondaryButton(
-                label: 'Không hủy',
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

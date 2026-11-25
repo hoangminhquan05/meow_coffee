@@ -41,6 +41,10 @@ class SessionProvider extends ChangeNotifier {
   bool get isCustomer => _user?.role == UserRole.customer;
   bool get isShipper => _user?.role == UserRole.shipper;
 
+  /// Nhân viên hoặc admin: bán tại quầy và xử lý đơn online.
+  bool get isSeller =>
+      _user?.role == UserRole.staff || _user?.role == UserRole.admin;
+
   /// Màn chính theo vai trò.
   String get homeRoute => homeRouteFor(_user?.role);
 

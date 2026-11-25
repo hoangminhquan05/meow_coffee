@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/cart_provider.dart';
+import '../providers/online_orders_provider.dart';
 import '../theme/app_theme.dart';
 
 class BottomNavBar extends StatelessWidget {
@@ -16,6 +17,7 @@ class BottomNavBar extends StatelessWidget {
     '/home',
     '/product',
     '/cart',
+    '/online_orders',
     '/profile',
   ];
 
@@ -28,6 +30,8 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final cartCount =
         context.select<CartProvider, int>((cart) => cart.totalItems);
+    final pendingOnline =
+        context.select<OnlineOrdersProvider, int>((o) => o.pendingCount);
 
     return Container(
       decoration: const BoxDecoration(
@@ -72,11 +76,19 @@ class BottomNavBar extends StatelessWidget {
                 onTap: () => _onTap(context, 2),
               ),
               _NavItem(
+                icon: Icons.delivery_dining_rounded,
+                outlinedIcon: Icons.delivery_dining_outlined,
+                label: 'Đơn Online',
+                active: currentIndex == 3,
+                badgeCount: pendingOnline,
+                onTap: () => _onTap(context, 3),
+              ),
+              _NavItem(
                 icon: Icons.person_rounded,
                 outlinedIcon: Icons.person_outline_rounded,
                 label: 'Tài Khoản',
-                active: currentIndex == 3,
-                onTap: () => _onTap(context, 3),
+                active: currentIndex == 4,
+                onTap: () => _onTap(context, 4),
               ),
             ],
           ),

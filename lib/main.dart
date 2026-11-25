@@ -2,16 +2,25 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 
 import 'config/env_config.dart';
+import 'models/order.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/customer_cart_provider.dart';
+import 'providers/online_orders_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/shop_settings_provider.dart';
 import 'screens/address/address_book_screen.dart';
+import 'screens/admin/payment_reviews_screen.dart';
+import 'screens/admin/refunds_screen.dart';
+import 'screens/staff/online_order_detail_screen.dart';
+import 'screens/staff/online_orders_screen.dart';
+import 'utils/formatters.dart';
 import 'screens/admin/shop_settings_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/verify_account_screen.dart';
@@ -58,6 +67,25 @@ Future<void> main() async {
 }
 
 final _navigatorKey = GlobalKey<NavigatorState>();
+final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+/// Đơn mới vào "Chờ xác nhận" khi app đang mở (chưa có push – bước 11).
+void _alertNewOrder(Order order) {
+  FlutterRingtonePlayer().playNotification();
+  HapticFeedback.vibrate();
+  _messengerKey.currentState
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      duration: const Duration(seconds: 8),
+      behavior: SnackBarBehavior.floating,
+      content: Text('Đơn mới ${order.orderCode} · ${formatMoney(order.total)}'),
+      action: SnackBarAction(
+        label: 'Xem',
+        onPressed: () => _navigatorKey.currentState
+            ?.pushNamed('/online_order', arguments: order.id),
+      ),
+    ));
+}
 
 class MeowCoffeeApp extends StatelessWidget {
   const MeowCoffeeApp({super.key});
@@ -88,6 +116,13 @@ class MeowCoffeeApp extends StatelessWidget {
           update: (_, session, cart) =>
               cart!..bindTo(session.isCustomer ? session.uid : null),
         ),
+        // Đơn online đang xử lý: chỉ NV/admin; báo đơn mới (âm thanh + rung).
+        ChangeNotifierProxyProvider<SessionProvider, OnlineOrdersProvider>(
+          lazy: false,
+          create: (_) => OnlineOrdersProvider()..onNewOrder = _alertNewOrder,
+          update: (_, session, orders) =>
+              orders!..setEnabled(session.isSeller),
+        ),
         // Cài đặt quán: chỉ lắng nghe khi đã đăng nhập.
         ChangeNotifierProxyProvider<SessionProvider, ShopSettingsProvider>(
           lazy: false,
@@ -98,6 +133,7 @@ class MeowCoffeeApp extends StatelessWidget {
       ],
       child: MaterialApp(
         navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _messengerKey,
         title: 'Meow Coffee',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
@@ -208,6 +244,21 @@ class MeowCoffeeApp extends StatelessWidget {
               return MaterialPageRoute(builder: (_) => const CustomerShell());
             case '/shipper':
               return MaterialPageRoute(builder: (_) => const ShipperShell());
+            case '/online_orders':
+              return MaterialPageRoute(
+                builder: (_) => const OnlineOrdersScreen(),
+              );
+            case '/online_order':
+              final orderId = settings.arguments as String? ?? '';
+              return MaterialPageRoute(
+                builder: (_) => OnlineOrderDetailScreen(orderId: orderId),
+              );
+            case '/refunds':
+              return MaterialPageRoute(builder: (_) => const RefundsScreen());
+            case '/payment_reviews':
+              return MaterialPageRoute(
+                builder: (_) => const PaymentReviewsScreen(),
+              );
             case '/shop_settings':
               return MaterialPageRoute(
                 builder: (_) => const ShopSettingsScreen(),

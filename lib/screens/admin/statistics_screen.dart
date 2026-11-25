@@ -23,6 +23,7 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   DayRange _range = DayRange.today();
   String? _sellerId;
+  OrderChannel? _channel;
   Stream<List<Order>>? _stream;
   String? _streamKey;
 
@@ -57,9 +58,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             for (final o in all)
               if (o.seller != null) o.seller!.id: o.seller!.name,
           };
-          final orders = _sellerId == null
-              ? all
-              : all.where((o) => o.seller?.id == _sellerId).toList();
+          final orders = all.where((o) {
+            if (_sellerId != null && o.seller?.id != _sellerId) return false;
+            if (_channel != null && o.channel != _channel) return false;
+            if (o.isOnline && o.status == OrderStatus.awaitingPayment) return false;
+            return true;
+          }).toList();
           final stats = _Stats.from(orders);
 
           return ListView(
@@ -69,7 +73,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 value: _range,
                 onChanged: (r) => setState(() => _range = r),
               ),
-              if (session.isAdmin && sellers.isNotEmpty) ...[
+              if (session.isAdmin) ...[
+                const SizedBox(height: 10),
+                SegmentedButton<OrderChannel?>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: null, label: Text('Tất cả')),
+                    ButtonSegment(value: OrderChannel.inStore, label: Text('Tại quán')),
+                    ButtonSegment(value: OrderChannel.online, label: Text('Online')),
+                  ],
+                  selected: {_channel},
+                  onSelectionChanged: (s) => setState(() => _channel = s.first),
+                ),
+              ],
+              if (session.isAdmin && sellers.isNotEmpty && _channel != OrderChannel.online) ...[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
                   initialValue:
@@ -147,6 +164,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         stats.byFulfillment[Fulfillment.dineIn] ?? 0,
                     Fulfillment.takeaway.label:
                         stats.byFulfillment[Fulfillment.takeaway] ?? 0,
+                    if (session.isAdmin)
+                      'Giao hàng (online)':
+                          stats.byFulfillment[Fulfillment.delivery] ?? 0,
                   },
                   total: stats.revenue,
                 ),

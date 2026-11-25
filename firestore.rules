@@ -62,13 +62,89 @@ service cloud.firestore {
         && request.resource.data.seq == resource.data.seq + 1;
     }
 
+    // ---- Đơn online: NV/admin xử lý (bước 7, mục 4 kế hoạch online) ----
+    // Mỗi lần đổi trạng thái thêm đúng 1 dòng status_history do chính người bấm.
+    function historyAppended() {
+      let n = resource.data.status_history.size();
+      let h = request.resource.data.status_history;
+      return h.size() == n + 1
+        && h[n].status == request.resource.data.status
+        && h[n].by.id == request.auth.uid;
+    }
+    // Đơn đã trả trước: phải ghi cần hoàn tiền (O17/O32); chưa trả: không đụng refund.
+    function refundRecorded() {
+      let a = request.resource.data;
+      return resource.data.payment_status == 'paid'
+        ? (a.refund.required == true && a.refund.done == false
+            && a.refund.amount is int && a.refund.amount > 0)
+        : a.get('refund', null) == resource.data.get('refund', null);
+    }
+    // Xác nhận → bắt đầu pha → pha xong.
+    function staffAdvanceOk() {
+      let from = resource.data.status;
+      let to = request.resource.data.status;
+      return ((from == 'pending' && to == 'confirmed')
+              || (from == 'confirmed' && to == 'preparing')
+              || (from == 'preparing' && to == 'ready'))
+        && onlyChanges(['status', 'status_history', 'updated_at'])
+        && historyAppended();
+    }
+    // Từ chối / hủy trước khi shipper lấy hàng.
+    function staffCancelOk() {
+      let a = request.resource.data;
+      return resource.data.status in ['pending', 'confirmed', 'preparing', 'ready']
+        && a.status == 'cancelled'
+        && a.cancel_reason is string && a.cancel_reason.size() > 0
+        && a.cancelled_by.id == request.auth.uid
+        && onlyChanges(['status', 'status_history', 'payment_status', 'cancelled_at',
+                        'cancelled_by', 'cancel_reason', 'refund', 'updated_at'])
+        && historyAppended()
+        && (resource.data.payment_status == 'paid'
+              ? a.payment_status == 'refunded'
+              : a.payment_status == resource.data.payment_status)
+        && refundRecorded();
+    }
+    // Bỏ món (O16): tổng tiền phải khớp, còn ít nhất 1 món, ghi item_changes.
+    function staffRemoveItemOk() {
+      let b = resource.data;
+      let a = request.resource.data;
+      let n = b.get('item_changes', []).size();
+      return b.status in ['pending', 'confirmed', 'preparing']
+        && a.status == b.status
+        && onlyChanges(['items', 'subtotal', 'total', 'item_changes', 'refund', 'updated_at'])
+        && a.items is list && a.items.size() >= 1 && a.items.size() <= b.items.size()
+        && a.subtotal is int && a.subtotal > 0 && a.subtotal < b.subtotal
+        && a.total == a.subtotal - b.discount + b.delivery.fee
+        && a.item_changes.size() == n + 1
+        && a.item_changes[n].by.id == request.auth.uid
+        && a.item_changes[n].reason is string && a.item_changes[n].reason.size() > 0
+        && refundRecorded();
+    }
+    // Admin đã chuyển khoản hoàn tiền.
+    function adminRefundDoneOk() {
+      let a = request.resource.data.refund;
+      let b = resource.data.get('refund', {});
+      return b.get('required', false) == true && b.get('done', true) == false
+        && onlyChanges(['refund'])
+        && a.required == true && a.done == true
+        && a.amount == b.amount
+        && a.done_by.id == request.auth.uid;
+    }
+
     match /orders/{id} {
       // Đơn online do Cloudflare Worker tạo (service account, bỏ qua Rules);
-      // khách chỉ đọc đơn online của chính mình.
+      // NV/admin đọc mọi đơn online; khách chỉ đọc đơn online của chính mình.
       allow read: if isAdmin()
         || (isSeller() && resource.data.get('seller', {}).get('id', '') == request.auth.uid)
+        || (isSeller() && resource.data.channel == 'online')
         || (isActive() && resource.data.channel == 'online'
             && resource.data.customer.id == request.auth.uid);
+
+      // Xử lý đơn online (bước 7).
+      allow update: if isSeller() && resource.data.channel == 'online'
+        && (staffAdvanceOk() || staffCancelOk() || staffRemoveItemOk());
+      allow update: if isAdmin() && resource.data.channel == 'online'
+        && adminRefundDoneOk();
 
       // Tạo đơn tại quán: thu tiền trước (Q2); tại quán bắt buộc có bàn (Q13).
       allow create: if isSeller()
@@ -165,6 +241,13 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['items', 'updated_at'])
         && request.resource.data.items is list
         && request.resource.data.items.size() <= 30;
+    }
+
+    // Giao dịch ngân hàng từ SePay: Worker ghi (service account); chỉ admin xem.
+    // Admin xử lý qua Worker (/admin/payments/{id}/resolve), không ghi thẳng.
+    match /payment_transactions/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Collection dành cho bán online (chưa triển khai): chặn mặc định.

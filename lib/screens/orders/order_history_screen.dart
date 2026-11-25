@@ -22,6 +22,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   DayRange _range = DayRange.today();
   OrderStatus? _status; // null = tất cả
   PaymentMethod? _method;
+  OrderChannel? _channel; // admin lọc tại quán / online
   String? _sellerId; // admin lọc theo nhân viên
   Stream<List<Order>>? _stream;
   String? _streamKey;
@@ -58,6 +59,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
           final orders = all.where((o) {
             if (_status != null && o.status != _status) return false;
             if (_method != null && o.paymentMethod != _method) return false;
+            if (_channel != null && o.channel != _channel) return false;
+            // Đơn VietQR đang chờ chuyển khoản chưa phải đơn thật – không hiện.
+            if (o.isOnline && o.status == OrderStatus.awaitingPayment) return false;
             if (_sellerId != null && o.seller?.id != _sellerId) return false;
             return true;
           }).toList();
@@ -93,6 +97,17 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                     },
                     onChanged: (v) => setState(() => _method = v),
                   ),
+                  if (session.isAdmin)
+                    _DropdownChip<OrderChannel?>(
+                      label: 'Kênh',
+                      value: _channel,
+                      items: const {
+                        null: 'Tất cả',
+                        OrderChannel.inStore: 'Tại quán',
+                        OrderChannel.online: 'Online',
+                      },
+                      onChanged: (v) => setState(() => _channel = v),
+                    ),
                   if (session.isAdmin)
                     _DropdownChip<String?>(
                       label: 'Nhân viên',
@@ -160,8 +175,9 @@ class OrderListTile extends StatelessWidget {
     final cancelled = order.isCancelled;
     return MeowCard(
       padding: const EdgeInsets.all(14),
-      onTap: () =>
-          Navigator.pushNamed(context, '/order_detail', arguments: order.id),
+      onTap: () => Navigator.pushNamed(
+          context, order.isOnline ? '/online_order' : '/order_detail',
+          arguments: order.id),
       child: Row(
         children: [
           Expanded(
@@ -181,6 +197,12 @@ class OrderListTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    if (!cancelled && order.isOnline && order.status.isActive)
+                      Text(order.status.label,
+                          style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.brand)),
                     if (cancelled)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -210,6 +232,8 @@ class OrderListTile extends StatelessWidget {
                     '${order.totalItems} món',
                     order.paymentMethod.label,
                     if (showSeller && order.seller != null) order.seller!.name,
+                    if (showSeller && order.isOnline && order.customer != null)
+                      'Khách: ${order.customer!.name}',
                   ].join(' · '),
                   style: const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
