@@ -148,11 +148,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<bool> _showVietQrDialog(int total, String ref) async {
+    final String qrUrl;
+    try {
+      qrUrl = _buildVietQrUrl(total, ref);
+    } on StateError catch (e) {
+      // Thiếu cấu hình VietQR trong .env.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return false;
+    }
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _VietQrDialog(
-        qrUrl: _buildVietQrUrl(total, ref),
+        qrUrl: qrUrl,
         total: total,
         paymentRef: ref,
       ),

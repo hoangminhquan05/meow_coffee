@@ -11,6 +11,14 @@ class EnvConfig {
     return fallback;
   }
 
+  /// Cấu hình bắt buộc: lấy từ `.env` (hoặc --dart-define), không có giá trị
+  /// mặc định trong code. Thiếu thì báo lỗi rõ tên khóa lúc dùng tới.
+  static String _require(String key, {String fallback = ''}) {
+    final value = _get(key, fallback: fallback);
+    if (value.isEmpty) throw MissingEnvError(key);
+    return value;
+  }
+
   // Firebase
   /// API key của app Android (dùng mặc định cho nền tảng khác nếu thiếu key riêng).
   static String get firebaseApiKey => _get(
@@ -135,61 +143,45 @@ class EnvConfig {
         fallback: const String.fromEnvironment('CLOUDINARY_API_SECRET'),
       );
 
-  static String get cloudinaryApiBaseUrl => _get(
+  static String get cloudinaryApiBaseUrl => _require(
         'CLOUDINARY_API_BASE_URL',
-        fallback: const String.fromEnvironment(
-          'CLOUDINARY_API_BASE_URL',
-          defaultValue: 'https://api.cloudinary.com/v1_1',
-        ),
+        fallback: const String.fromEnvironment('CLOUDINARY_API_BASE_URL'),
       );
 
-  static String get cloudinaryFolderDefault => _get(
+  static String get cloudinaryFolderDefault => _require(
         'CLOUDINARY_FOLDER_DEFAULT',
-        fallback: const String.fromEnvironment(
-          'CLOUDINARY_FOLDER_DEFAULT',
-          defaultValue: 'meow_coffee',
-        ),
+        fallback: const String.fromEnvironment('CLOUDINARY_FOLDER_DEFAULT'),
       );
 
-  static String get cloudinaryFolderProducts => _get(
+  static String get cloudinaryFolderProducts => _require(
         'CLOUDINARY_FOLDER_PRODUCTS',
-        fallback: const String.fromEnvironment(
-          'CLOUDINARY_FOLDER_PRODUCTS',
-          defaultValue: 'product_cf',
-        ),
+        fallback: const String.fromEnvironment('CLOUDINARY_FOLDER_PRODUCTS'),
       );
 
-  static String get cloudinaryFolderBanners => _get(
+  static String get cloudinaryFolderBanners => _require(
         'CLOUDINARY_FOLDER_BANNERS',
-        fallback: const String.fromEnvironment(
-          'CLOUDINARY_FOLDER_BANNERS',
-          defaultValue: 'banner',
-        ),
+        fallback: const String.fromEnvironment('CLOUDINARY_FOLDER_BANNERS'),
       );
 
-  static String get cloudinaryFolderAvatars => _get(
+  static String get cloudinaryFolderAvatars => _require(
         'CLOUDINARY_FOLDER_AVATARS',
-        fallback: const String.fromEnvironment(
-          'CLOUDINARY_FOLDER_AVATARS',
-          defaultValue: 'avt_user',
-        ),
+        fallback: const String.fromEnvironment('CLOUDINARY_FOLDER_AVATARS'),
+      );
+
+  static String get cloudinaryFolderChat => _require(
+        'CLOUDINARY_FOLDER_CHAT',
+        fallback: const String.fromEnvironment('CLOUDINARY_FOLDER_CHAT'),
       );
 
   // EmailJS
-  static String get emailJsApiUrl => _get(
+  static String get emailJsApiUrl => _require(
         'EMAILJS_API_URL',
-        fallback: const String.fromEnvironment(
-          'EMAILJS_API_URL',
-          defaultValue: 'https://api.emailjs.com/api/v1.0/email/send',
-        ),
+        fallback: const String.fromEnvironment('EMAILJS_API_URL'),
       );
 
-  static String get emailJsOrigin => _get(
+  static String get emailJsOrigin => _require(
         'EMAILJS_ORIGIN',
-        fallback: const String.fromEnvironment(
-          'EMAILJS_ORIGIN',
-          defaultValue: 'http://localhost',
-        ),
+        fallback: const String.fromEnvironment('EMAILJS_ORIGIN'),
       );
 
   static String get emailJsServiceId => _get(
@@ -218,43 +210,38 @@ class EnvConfig {
       );
 
   // VietQR
-  static String get vietQrApiBaseUrl => _get(
+  static String get vietQrApiBaseUrl => _require(
         'VIETQR_API_BASE_URL',
-        fallback: const String.fromEnvironment(
-          'VIETQR_API_BASE_URL',
-          defaultValue: 'https://api.vietqr.io/image',
-        ),
+        fallback: const String.fromEnvironment('VIETQR_API_BASE_URL'),
       );
 
-  static String get vietQrBankBin => _get(
+  static String get vietQrBankBin => _require(
         'VIETQR_BANK_BIN',
-        fallback: const String.fromEnvironment(
-          'VIETQR_BANK_BIN',
-          defaultValue: '970436',
-        ),
+        fallback: const String.fromEnvironment('VIETQR_BANK_BIN'),
       );
 
-  static String get vietQrAccountNumber => _get(
+  static String get vietQrAccountNumber => _require(
         'VIETQR_ACCOUNT_NUMBER',
-        fallback: const String.fromEnvironment(
-          'VIETQR_ACCOUNT_NUMBER',
-          defaultValue: '1035196249',
-        ),
+        fallback: const String.fromEnvironment('VIETQR_ACCOUNT_NUMBER'),
       );
 
-  static String get vietQrAccountName => _get(
+  static String get vietQrAccountName => _require(
         'VIETQR_ACCOUNT_NAME',
-        fallback: const String.fromEnvironment(
-          'VIETQR_ACCOUNT_NAME',
-          defaultValue: 'NGUYEN THI THANH THAO',
-        ),
+        fallback: const String.fromEnvironment('VIETQR_ACCOUNT_NAME'),
       );
 
-  static String get vietQrTemplateId => _get(
+  static String get vietQrTemplateId => _require(
         'VIETQR_TEMPLATE_ID',
-        fallback: const String.fromEnvironment(
-          'VIETQR_TEMPLATE_ID',
-          defaultValue: 'g3nbcFJ',
-        ),
+        fallback: const String.fromEnvironment('VIETQR_TEMPLATE_ID'),
       );
+}
+
+/// Thiếu một khóa cấu hình trong `.env`.
+class MissingEnvError extends StateError {
+  final String key;
+
+  MissingEnvError(this.key) : super('Thiếu $key trong file .env');
+
+  @override
+  String toString() => message;
 }

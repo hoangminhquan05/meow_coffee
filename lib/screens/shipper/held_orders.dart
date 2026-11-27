@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/enums.dart';
+import '../../models/chat.dart';
 import '../../models/order.dart';
+import '../../providers/chat_provider.dart';
 import '../../providers/shop_settings_provider.dart';
 import '../../services/online_order_service.dart';
 import '../../services/shipper_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 
 /// Đơn shipper đang giữ (theo `shipper_status.active_order_ids`), xếp theo
@@ -189,6 +192,18 @@ class _HeldOrderCard extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                   color: delivering ? AppColors.brand : AppColors.warning)),
                         ),
+                        const Spacer(),
+                        // Khách nhắn chưa đọc.
+                        Builder(builder: (context) {
+                          final unread = context.select<ChatProvider, int>(
+                              (c) => c.unreadOf(ChatRef.order(order.id)));
+                          if (unread == 0) return const SizedBox.shrink();
+                          return CountBadge(
+                            count: unread,
+                            child: const Icon(Icons.chat_bubble_rounded,
+                                size: 20, color: AppColors.brand),
+                          );
+                        }),
                       ],
                     ),
                     const SizedBox(height: 4),

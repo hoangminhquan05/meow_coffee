@@ -12,6 +12,7 @@ import '../../services/staff_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 import '../online/my_orders_screen.dart' show StatusChip;
 import 'dispatch_widgets.dart';
@@ -105,6 +106,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
           automaticallyImplyLeading: false,
           backgroundColor: AppColors.bg,
           actions: [
+            const ChatInboxButton(),
             TextButton.icon(
               onPressed: () => Navigator.pushNamed(context, '/shippers_live'),
               icon: const Icon(Icons.delivery_dining_rounded, color: AppColors.brand),

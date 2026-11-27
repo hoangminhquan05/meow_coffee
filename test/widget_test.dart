@@ -82,7 +82,7 @@ void main() {
     expect(SessionProvider.homeRouteFor(UserRole.shipper), '/shipper');
     expect(SessionProvider.homeRouteFor(UserRole.staff), '/home');
     expect(SessionProvider.homeRouteFor(UserRole.admin), '/home');
-    expect(SessionProvider.homeRouteFor(null), '/home');
+    expect(SessionProvider.homeRouteFor(null), '/login');
   });
 
   test('ShopSettings: opening hours incl. overnight, closed reasons', () {

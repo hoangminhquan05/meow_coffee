@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/enums.dart';
+import '../../models/chat.dart';
 import '../../models/order.dart';
 import '../../services/order_service.dart';
 import '../../services/staff_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 import '../online/customer_order_detail_screen.dart' show RefundNotice;
 import '../online/my_orders_screen.dart' show StatusChip;
@@ -244,7 +246,18 @@ class _CustomerCard extends StatelessWidget {
         children: [
           const Text('KHÁCH HÀNG', style: _title),
           const SizedBox(height: 6),
-          if (c != null) _PhoneLine(name: c.name, phone: c.phone),
+          if (c != null) ...[
+            _PhoneLine(name: c.name, phone: c.phone),
+            if (c.id.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ChatActionButton(
+                  label: 'Nhắn khách',
+                  chat: ChatRef.shop(c.id),
+                  onPressed: () => ChatNav.shopWithCustomer(context, order),
+                ),
+              ),
+          ],
           if (d != null) ...[
             const SizedBox(height: 10),
             const Text('GIAO ĐẾN', style: _title),

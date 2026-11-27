@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/enums.dart';
+import '../../models/chat.dart';
 import '../../models/order.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/shop_settings_provider.dart';
@@ -13,6 +14,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/launchers.dart';
 import '../../widgets/map_location_picker.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 import '../../widgets/reason_sheet.dart';
 
@@ -203,6 +205,15 @@ class _ShipperOrderScreenState extends State<ShipperOrderScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ChatActionButton(
+                        label: orderChatOpen(o) ? 'Nhắn khách' : 'Xem tin nhắn với khách',
+                        chat: ChatRef.order(o.id),
+                        onPressed: mine ? () => ChatNav.orderChat(context, o) : null,
+                      ),
                     ),
                   ],
                 ),

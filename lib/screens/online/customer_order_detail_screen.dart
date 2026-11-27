@@ -7,14 +7,18 @@ import 'package:provider/provider.dart';
 
 import '../../core/enums.dart';
 import '../../core/firestore_paths.dart';
+import '../../models/chat.dart';
 import '../../models/order.dart';
 import '../../models/product.dart';
 import '../../providers/customer_cart_provider.dart';
+import '../../providers/session_provider.dart';
+import '../../services/chat_service.dart';
 import '../../services/online_order_service.dart';
 import '../../services/order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/vietqr.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 import '../../widgets/reason_sheet.dart';
 import 'my_orders_screen.dart' show StatusChip, statusColor;
@@ -186,12 +190,22 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                 const SizedBox(height: 12),
               ],
               if (order.refund?.required == true) ...[
-                RefundNotice(refund: order.refund!),
+                RefundNotice(
+                  refund: order.refund!,
+                  // Khách gửi số tài khoản qua chat Meow Shop (O32).
+                  onSendBankInfo: () => ChatNav.shopAsCustomer(
+                    context,
+                    attach: OrderCard.of(order),
+                    draft: ChatService.refundDraft(order),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
               _Timeline(order: order),
               const SizedBox(height: 12),
               _DeliveryCard(order: order),
+              const SizedBox(height: 12),
+              _ChatButtons(order: order),
               const SizedBox(height: 12),
               _ItemsCard(order: order),
               const SizedBox(height: 16),
@@ -244,6 +258,14 @@ class _VietQrPanel extends StatelessWidget {
     final expired = left != null && left.isNegative;
     String mmss(Duration d) =>
         '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    // Thiếu cấu hình VietQR trong .env → báo rõ thay vì sập màn.
+    String? qrUrl;
+    String? qrError;
+    try {
+      qrUrl = buildVietQrUrl(amount: order.total, content: order.transferContent);
+    } on StateError catch (e) {
+      qrError = e.message;
+    }
 
     return MeowCard(
       padding: const EdgeInsets.all(16),
@@ -268,16 +290,22 @@ class _VietQrPanel extends StatelessWidget {
             SizedBox(
               width: 220,
               height: 220,
-              child: CachedNetworkImage(
-                imageUrl: buildVietQrUrl(amount: order.total, content: order.transferContent),
-                fit: BoxFit.contain,
-                placeholder: (_, _) =>
-                    const Center(child: CircularProgressIndicator(color: AppColors.brand)),
-                errorWidget: (_, _, _) => const Center(
-                  child: Text('Không tải được mã QR',
-                      style: TextStyle(color: AppColors.danger)),
-                ),
-              ),
+              child: qrUrl == null
+                  ? Center(
+                      child: Text(qrError ?? 'Không tạo được mã QR',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.danger)),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: qrUrl,
+                      fit: BoxFit.contain,
+                      placeholder: (_, _) =>
+                          const Center(child: CircularProgressIndicator(color: AppColors.brand)),
+                      errorWidget: (_, _, _) => const Center(
+                        child: Text('Không tải được mã QR',
+                            style: TextStyle(color: AppColors.danger)),
+                      ),
+                    ),
             ),
             const SizedBox(height: 8),
             Text(formatMoney(order.total),
@@ -320,31 +348,85 @@ class _CancelledBox extends StatelessWidget {
 }
 
 /// Thông tin hoàn tiền cho đơn đã trả trước (dùng cho cả khách và NV).
+/// Có `onSendBankInfo` (màn của khách) → nút gửi số tài khoản qua chat.
 class RefundNotice extends StatelessWidget {
   final OrderRefund refund;
+  final VoidCallback? onSendBankInfo;
 
-  const RefundNotice({super.key, required this.refund});
+  const RefundNotice({super.key, required this.refund, this.onSendBankInfo});
 
   @override
   Widget build(BuildContext context) {
     final done = refund.done;
+    final ask = !done && onSendBankInfo != null;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: done ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Text(
-        done
-            ? 'Quán đã hoàn ${formatMoney(refund.amount)} lúc ${formatDateTime(refund.doneAt)}'
-            : 'Quán sẽ hoàn ${formatMoney(refund.amount)} cho bạn. '
-                'Quán sẽ liên hệ để xin số tài khoản nhận tiền.',
-        style: TextStyle(
-          height: 1.4,
-          fontWeight: FontWeight.w600,
-          color: done ? AppColors.success : AppColors.warning,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            done
+                ? 'Quán đã hoàn ${formatMoney(refund.amount)} lúc ${formatDateTime(refund.doneAt)}'
+                : ask
+                    ? 'Quán sẽ hoàn ${formatMoney(refund.amount)} cho bạn. '
+                        'Bạn gửi số tài khoản nhận tiền cho Meow Shop qua chat nhé.'
+                    : 'Quán sẽ hoàn ${formatMoney(refund.amount)} cho khách. '
+                        'Khách gửi số tài khoản qua chat Meow Shop.',
+            style: TextStyle(
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+              color: done ? AppColors.success : AppColors.warning,
+            ),
+          ),
+          if (ask) ...[
+            const SizedBox(height: 10),
+            MeowSecondaryButton(
+              label: 'Gửi số tài khoản nhận hoàn tiền',
+              icon: Icons.account_balance_outlined,
+              height: 44,
+              onPressed: onSendBankInfo,
+            ),
+          ],
+        ],
       ),
+    );
+  }
+}
+
+/// Nhắn Meow Shop (kèm thẻ đơn) / nhắn shipper của đơn.
+class _ChatButtons extends StatelessWidget {
+  final Order order;
+
+  const _ChatButtons({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = context.select<SessionProvider, String>((s) => s.uid);
+    final hasShipper = order.delivery?.shipper != null;
+    return Row(
+      children: [
+        Expanded(
+          child: ChatActionButton(
+            label: 'Nhắn Meow Shop',
+            chat: ChatRef.shop(uid),
+            onPressed: () => ChatNav.shopAsCustomer(context, attach: OrderCard.of(order)),
+          ),
+        ),
+        if (hasShipper) ...[
+          const SizedBox(width: 10),
+          Expanded(
+            child: ChatActionButton(
+              label: orderChatOpen(order) ? 'Nhắn shipper' : 'Tin nhắn shipper',
+              chat: ChatRef.order(order.id),
+              onPressed: () => ChatNav.orderChat(context, order),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

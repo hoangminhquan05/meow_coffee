@@ -8,6 +8,7 @@ import '../../providers/customer_cart_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../services/shipper_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/chat_buttons.dart';
 import '../home/home_screen.dart';
 import '../online/customer_cart_screen.dart';
 import '../online/my_orders_screen.dart';
@@ -39,7 +40,8 @@ class _CustomerShellState extends State<CustomerShell> {
       const AccountScreen(),
     ];
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      // Bong bóng chat nổi (bước 10): Meow Shop + shipper của đơn đang giao.
+      body: CustomerChatBubble(child: IndexedStack(index: _index, children: pages)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),

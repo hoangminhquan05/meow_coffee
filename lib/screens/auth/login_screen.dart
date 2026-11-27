@@ -79,7 +79,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (!mounted || credential.user == null) return;
       // Chờ nạp hồ sơ users/{uid}: chưa có hồ sơ hoặc bị khóa → bị đăng xuất.
-      final error = await context.read<SessionProvider>().waitForProfile();
+      final error = await context
+          .read<SessionProvider>()
+          .waitForProfile(uid: credential.user!.uid);
       if (!mounted) return;
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(

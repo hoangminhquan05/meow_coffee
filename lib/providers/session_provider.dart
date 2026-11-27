@@ -25,6 +25,10 @@ class SessionProvider extends ChangeNotifier {
   UserModel? _user;
   bool _isLoading = true;
 
+  /// Hoàn tất khi Firebase báo trạng thái đăng nhập lần đầu (phiên cũ còn
+  /// hay không) – màn khởi động chờ cái này.
+  final Completer<void> _authReady = Completer<void>();
+
   /// Lý do phiên vừa kết thúc (để màn đăng nhập hiển thị thông báo).
   SessionEndReason? lastEndReason;
 
@@ -52,8 +56,13 @@ class SessionProvider extends ChangeNotifier {
   static String homeRouteFor(UserRole? role) => route_guard.homeRouteFor(role);
 
   void _onAuthChanged(User? authUser) {
+    if (!_authReady.isCompleted) _authReady.complete();
     _userSub?.cancel();
     _userSub = null;
+    // Đổi sang tài khoản khác: bỏ ngay hồ sơ cũ để không ai đọc nhầm vai trò
+    // của người trước (trước đây đăng nhập shipper sau phiên NV còn sót lại
+    // → bị đưa vào trang chủ NV).
+    if (_user != null && _user!.uid != authUser?.uid) _user = null;
     if (authUser == null) {
       _user = null;
       _isLoading = false;
@@ -109,16 +118,37 @@ class SessionProvider extends ChangeNotifier {
     await FirebaseAuth.instance.signOut();
   }
 
-  /// Chờ hồ sơ được nạp sau khi đăng nhập. Trả về lỗi (tiếng Việt) nếu không hợp lệ.
-  Future<String?> waitForProfile() async {
-    for (var i = 0; i < 50; i++) {
-      if (_user != null) return null;
-      if (!_isLoading && FirebaseAuth.instance.currentUser == null) {
-        return endReasonMessage(lastEndReason) ?? 'Đăng nhập thất bại';
+  /// Chờ nạp hồ sơ `users/{uid}` của đúng tài khoản `uid` (mặc định: tài
+  /// khoản Firebase hiện tại). Trả về lỗi (tiếng Việt) nếu không hợp lệ.
+  Future<String?> waitForProfile({String? uid, Duration timeout = const Duration(seconds: 10)}) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final current = FirebaseAuth.instance.currentUser;
+      final expected = uid ?? current?.uid;
+      if (expected != null && _user?.uid == expected) return null;
+      if (current == null || (uid != null && current.uid != uid)) {
+        // Bị đăng xuất (khóa / chưa cấp quyền) hoặc đã đổi sang tài khoản khác.
+        if (!_isLoading || current != null) {
+          return endReasonMessage(lastEndReason) ?? 'Đăng nhập thất bại';
+        }
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     return 'Không tải được thông tin tài khoản';
+  }
+
+  /// Màn đầu tiên khi mở app (kể cả F5 trên web): còn phiên đăng nhập hợp lệ
+  /// → trang chủ đúng vai trò; không thì màn đăng nhập.
+  Future<String> startRoute() async {
+    try {
+      await _authReady.future.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      return '/login';
+    }
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return '/login';
+    final error = await waitForProfile(uid: uid, timeout: const Duration(seconds: 15));
+    return error == null ? homeRoute : '/login';
   }
 
   static String? endReasonMessage(SessionEndReason? reason) {

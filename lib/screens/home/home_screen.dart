@@ -13,6 +13,7 @@ import '../../services/product_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/add_to_cart_sheet.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/chat_buttons.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -134,6 +135,11 @@ class _HomeTopBar extends StatelessWidget {
           ),
           Row(
             children: [
+              // Hộp thư Meow Shop (bước 10) – khách dùng bong bóng chat.
+              if (context.select<SessionProvider, bool>((s) => s.isSeller)) ...[
+                const ChatInboxButton(),
+                const SizedBox(width: 2),
+              ],
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

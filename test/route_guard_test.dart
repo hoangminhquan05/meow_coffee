@@ -26,13 +26,21 @@ void main() {
     expect(guardRoute('/shop_settings', UserRole.admin), isNull);
   });
 
-  test('shared screens open for everyone; signed-out is not redirected', () {
+  test('shared screens open for everyone', () {
     for (final role in UserRole.values) {
       expect(guardRoute('/change_password', role), isNull);
       expect(guardRoute('/product_detail', role), isNull);
       expect(guardRoute('/login', role), isNull);
     }
-    expect(guardRoute('/home', null), isNull);
     expect(guardRoute('/shipper', UserRole.customer), '/customer');
+  });
+
+  test('signed-out users are sent to login from role screens', () {
+    for (final r in ['/home', '/customer', '/shipper', '/online_orders', '/shop_settings', '/shop_inbox']) {
+      expect(guardRoute(r, null), '/login', reason: r);
+    }
+    for (final r in ['/login', '/register', '/forgot_pass', '/reset_pass', '/verify_account']) {
+      expect(guardRoute(r, null), isNull, reason: r);
+    }
   });
 }

@@ -14,4 +14,10 @@ class FsCollections {
   static const shipperStatus = 'shipper_status';
   static const shipperShifts = 'shipper_shifts';
   static const dispatchOffers = 'dispatch_offers';
+
+  // Chat (bước 10)
+  static const shopChats = 'shop_chats';
+  static const orderChats = 'order_chats';
+  static const messages = 'messages';
+  static const shopMessageAuthors = 'shop_message_authors';
 }

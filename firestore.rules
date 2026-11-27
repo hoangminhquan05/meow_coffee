@@ -296,9 +296,173 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Collection dành cho bán online (chưa triển khai): chặn mặc định.
-    match /chats/{document=**} {
-      allow read, write: if false;
+    // ---- Chat (bước 10, mục 7 kế hoạch online) ----
+    // Mỗi lần gửi là 1 batch: tin nhắn + cập nhật đầu cuộc chat (tin cuối,
+    // bộ đếm chưa đọc) [+ tên NV thật]. Không sửa / xóa tin đã gửi.
+
+    // Nội dung tin: văn bản ≤ 1000 ký tự, ảnh Cloudinary, hoặc thẻ đơn.
+    function validMessage(d) {
+      return d.keys().hasOnly(['sender_role', 'sender_id', 'type', 'text',
+                               'image_url', 'order_ref', 'created_at'])
+        && d.created_at == request.time
+        && ((d.type == 'text' && d.text is string
+               && d.text.size() > 0 && d.text.size() <= 1000)
+            || (d.type == 'image' && d.image_url is string
+               && d.image_url.matches('https://res[.]cloudinary[.]com/.+'))
+            || (d.type == 'order' && d.order_ref.id is string
+               && d.order_ref.code is string));
+    }
+    // Bộ đếm chưa đọc: của mình chỉ về 0 (hoặc giữ nguyên), của bên kia
+    // giữ nguyên hoặc +1 (mỗi batch 1 tin).
+    function countersOk(own, other) {
+      let a = request.resource.data;
+      let b = resource.data;
+      return a.get(own, 0) in [0, b.get(own, 0)]
+        && a.get(other, 0) in [b.get(other, 0), b.get(other, 0) + 1];
+    }
+    function countersOkOnCreate(own, other) {
+      let a = request.resource.data;
+      return a.get(own, 0) == 0 && a.get(other, 0) in [0, 1];
+    }
+    // Tin cuối: giữ nguyên (đánh dấu đã đọc) hoặc vừa gửi (giờ server).
+    function lastMessageOk() {
+      return request.resource.data.get('last_message_at', null)
+          == resource.data.get('last_message_at', null)
+        || request.resource.data.last_message_at == request.time;
+    }
+
+    // Chat "Meow Shop": shop_chats/{customerUid}. Khách chỉ chat của mình;
+    // mọi NV/admin đọc/trả lời mọi cuộc (Hộp thư Meow Shop).
+    function isChatOwner(cu) {
+      return isActive() && request.auth.uid == cu && me().role == 'customer';
+    }
+    function shopChatKeys() {
+      return ['customer', 'last_message', 'last_message_at',
+              'unread_shop', 'unread_customer'];
+    }
+    // Thẻ đơn trong chat shop phải là đơn của chính khách đó.
+    function orderRefOk(d, cu) {
+      return d.type != 'order'
+        || get(/databases/$(database)/documents/orders/$(d.order_ref.id)).data.customer.id == cu;
+    }
+
+    match /shop_chats/{cu} {
+      allow read: if isSeller() || isChatOwner(cu);
+      allow create: if request.resource.data.keys().hasOnly(shopChatKeys())
+        && request.resource.data.customer.id == cu
+        && request.resource.data.last_message_at == request.time
+        && ((isChatOwner(cu) && countersOkOnCreate('unread_customer', 'unread_shop'))
+            || (isSeller()
+                && get(/databases/$(database)/documents/users/$(cu)).data.role == 'customer'
+                && countersOkOnCreate('unread_shop', 'unread_customer')));
+      allow update: if onlyChanges(shopChatKeys())
+        && request.resource.data.customer.id == cu
+        && lastMessageOk()
+        && ((isChatOwner(cu) && countersOk('unread_customer', 'unread_shop'))
+            || (isSeller() && countersOk('unread_shop', 'unread_customer')));
+      allow delete: if false;
+
+      match /messages/{mid} {
+        allow read: if isSeller() || isChatOwner(cu);
+        // NV/admin gửi dưới tên "Meow Shop" và phải ghi kèm tên thật (O31).
+        allow create: if validMessage(request.resource.data)
+          && orderRefOk(request.resource.data, cu)
+          && ((isChatOwner(cu)
+                && request.resource.data.sender_role == 'customer'
+                && request.resource.data.sender_id == request.auth.uid)
+              || (isSeller()
+                && request.resource.data.sender_role == 'shop'
+                && request.resource.data.sender_id == 'meowshop'
+                && getAfter(/databases/$(database)/documents/shop_message_authors/$(mid))
+                     .data.staff.id == request.auth.uid));
+        allow update, delete: if false;
+      }
+    }
+
+    // Tên NV thật của từng tin "Meow Shop": chỉ NV/admin đọc (O31).
+    match /shop_message_authors/{mid} {
+      allow read: if isSeller();
+      allow create: if isSeller()
+        && request.resource.data.keys().hasOnly(['chat_id', 'staff', 'created_at'])
+        && request.resource.data.staff.id == request.auth.uid
+        && request.resource.data.created_at == request.time
+        && existsAfter(/databases/$(database)/documents/shop_chats/$(request.resource.data.chat_id)/messages/$(mid));
+      allow update, delete: if false;
+    }
+
+    // Chat shipper–khách theo đơn: order_chats/{orderId}. Chỉ khách của đơn
+    // và shipper đang giữ đơn (đổi shipper → shipper mới thấy lịch sử, người
+    // cũ mất quyền). Gửi được khi đơn đã có shipper và đang Sẵn sàng / Đang
+    // giao / Giao thất bại; Hoàn tất / Hủy → chỉ đọc. NV/admin không xem.
+    function chatOrder(orderId) {
+      return get(/databases/$(database)/documents/orders/$(orderId)).data;
+    }
+    function orderShipperId(o) {
+      return o.get('delivery', {}).get('shipper', null) == null
+        ? '' : o.delivery.shipper.id;
+    }
+    function orderChatRole(o) {
+      return !isActive() || o.get('channel', '') != 'online' ? ''
+        : o.customer.id == request.auth.uid ? 'customer'
+        : orderShipperId(o) == request.auth.uid ? 'shipper'
+        : '';
+    }
+    function orderChatOpen(o) {
+      return o.status in ['ready', 'delivering', 'delivery_failed']
+        && orderShipperId(o) != '';
+    }
+    function otherUnread(role) {
+      return role == 'customer' ? 'unread_shipper' : 'unread_customer';
+    }
+    function orderChatKeys() {
+      return ['order_id', 'order_code', 'last_message', 'last_message_at',
+              'unread_customer', 'unread_shipper'];
+    }
+    function orderChatReadOk(orderId) {
+      return orderChatRole(chatOrder(orderId)) != '';
+    }
+    function orderChatCreateOk(orderId) {
+      let o = chatOrder(orderId);
+      let role = orderChatRole(o);
+      return role != '' && orderChatOpen(o)
+        && request.resource.data.keys().hasOnly(orderChatKeys())
+        && request.resource.data.order_id == orderId
+        && request.resource.data.last_message_at == request.time
+        && countersOkOnCreate('unread_' + role, otherUnread(role));
+    }
+    // Gửi tin khi chat còn mở; đã khóa thì chỉ được đánh dấu đã đọc.
+    function orderChatUpdateOk(orderId) {
+      let o = chatOrder(orderId);
+      let role = orderChatRole(o);
+      return role != ''
+        && onlyChanges(orderChatKeys())
+        && request.resource.data.order_id == orderId
+        && lastMessageOk()
+        && countersOk('unread_' + role, otherUnread(role))
+        && (orderChatOpen(o) || onlyChanges(['unread_' + role]));
+    }
+    function orderMessageCreateOk(orderId) {
+      let o = chatOrder(orderId);
+      let role = orderChatRole(o);
+      let d = request.resource.data;
+      return role != '' && orderChatOpen(o)
+        && validMessage(d)
+        && d.type in ['text', 'image']
+        && d.sender_role == role
+        && d.sender_id == request.auth.uid;
+    }
+
+    match /order_chats/{orderId} {
+      allow read: if orderChatReadOk(orderId);
+      allow create: if orderChatCreateOk(orderId);
+      allow update: if orderChatUpdateOk(orderId);
+      allow delete: if false;
+
+      match /messages/{mid} {
+        allow read: if orderChatReadOk(orderId);
+        allow create: if orderMessageCreateOk(orderId);
+        allow update, delete: if false;
+      }
     }
   }
 }

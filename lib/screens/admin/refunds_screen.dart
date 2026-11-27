@@ -8,6 +8,8 @@ import '../../providers/session_provider.dart';
 import '../../services/staff_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../services/chat_service.dart';
+import '../../widgets/chat_buttons.dart';
 import '../../widgets/meow_ui.dart';
 
 /// Admin: đơn đã trả trước cần hoàn tiền tay (O32). Chuyển khoản cho khách
@@ -194,11 +196,31 @@ class _RefundTileState extends State<_RefundTile> {
             style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
           const SizedBox(height: 10),
-          MeowPrimaryButton(
-            label: 'Đã hoàn tiền',
-            height: 44,
-            isLoading: _busy,
-            onPressed: _busy ? null : _markDone,
+          Row(
+            children: [
+              Expanded(
+                child: MeowSecondaryButton(
+                  label: 'Nhắn khách',
+                  icon: Icons.chat_bubble_outline_rounded,
+                  height: 44,
+                  // Xin số tài khoản qua chat Meow Shop, kèm thẻ đơn.
+                  onPressed: () => ChatNav.shopWithCustomer(
+                    context,
+                    o,
+                    draft: ChatService.askRefundDraft(o, formatMoney(o.refund!.amount)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: MeowPrimaryButton(
+                  label: 'Đã hoàn tiền',
+                  height: 44,
+                  isLoading: _busy,
+                  onPressed: _busy ? null : _markDone,
+                ),
+              ),
+            ],
           ),
         ],
       ),

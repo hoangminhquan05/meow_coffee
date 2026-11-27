@@ -8,14 +8,18 @@ import 'package:provider/provider.dart';
 import 'config/env_config.dart';
 import 'core/enums.dart';
 import 'core/route_guard.dart';
+import 'models/chat.dart';
 import 'models/order.dart';
 import 'providers/banner_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/chat_provider.dart';
 import 'providers/customer_cart_provider.dart';
 import 'providers/online_orders_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/shop_settings_provider.dart';
 import 'screens/address/address_book_screen.dart';
+import 'screens/chat/chat_screen.dart';
+import 'screens/chat/shop_inbox_screen.dart';
 import 'screens/admin/payment_reviews_screen.dart';
 import 'screens/admin/refunds_screen.dart';
 import 'screens/staff/online_order_detail_screen.dart';
@@ -25,6 +29,7 @@ import 'utils/alert_sound.dart';
 import 'utils/formatters.dart';
 import 'screens/admin/shop_settings_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/auth/startup_screen.dart';
 import 'screens/auth/verify_account_screen.dart';
 import 'screens/online/checkout_screen.dart';
 import 'screens/online/customer_cart_screen.dart';
@@ -89,6 +94,28 @@ void _alertNewOrder(Order order) {
     ));
 }
 
+/// Tin nhắn mới khi app đang mở (chưa có push – bước 11). NV và shipper
+/// kèm tiếng báo + rung; khách chỉ hiện thanh báo.
+void _alertChat(ChatAlert alert) {
+  if (alert.sound) AlertSound.notify();
+  _messengerKey.currentState
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      duration: const Duration(seconds: 6),
+      behavior: SnackBarBehavior.floating,
+      content: Text(
+        '${alert.args.title}: ${alert.preview}',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      action: SnackBarAction(
+        label: 'Mở',
+        onPressed: () =>
+            _navigatorKey.currentState?.pushNamed('/chat', arguments: alert.args),
+      ),
+    ));
+}
+
 class MeowCoffeeApp extends StatelessWidget {
   const MeowCoffeeApp({super.key});
 
@@ -125,6 +152,13 @@ class MeowCoffeeApp extends StatelessWidget {
           update: (_, session, orders) =>
               orders!..setEnabled(session.isSeller),
         ),
+        // Chat (bước 10): tin chưa đọc + báo tin mới theo vai trò.
+        ChangeNotifierProxyProvider<SessionProvider, ChatProvider>(
+          lazy: false,
+          create: (_) => ChatProvider()..onIncoming = _alertChat,
+          update: (_, session, chats) =>
+              chats!..bind(session.uid, ChatRole.forUser(session.user?.role)),
+        ),
         // Cài đặt quán: chỉ lắng nghe khi đã đăng nhập.
         ChangeNotifierProxyProvider<SessionProvider, ShopSettingsProvider>(
           lazy: false,
@@ -140,7 +174,15 @@ class MeowCoffeeApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        initialRoute: '/login',
+        initialRoute: '/',
+        // Mở app / F5 trên web (dù URL đang ở /#/home hay /#/shipper) luôn đi
+        // qua màn khởi động: chờ biết ai đang đăng nhập rồi mới chọn trang chủ.
+        onGenerateInitialRoutes: (_) => [
+          MaterialPageRoute(
+            settings: const RouteSettings(name: '/'),
+            builder: (_) => const StartupScreen(),
+          ),
+        ],
         onGenerateRoute: (settings) {
           // Mở màn không thuộc vai trò mình → về trang chủ của vai trò đó.
           final navContext = _navigatorKey.currentContext;
@@ -273,6 +315,19 @@ class MeowCoffeeApp extends StatelessWidget {
               return MaterialPageRoute(
                 builder: (_) => OnlineOrderDetailScreen(orderId: orderId),
               );
+            case '/chat':
+              final args = settings.arguments;
+              if (args is! ChatArgs) {
+                return MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(),
+                    body: const Center(child: Text('Không mở được cuộc trò chuyện')),
+                  ),
+                );
+              }
+              return MaterialPageRoute(builder: (_) => ChatScreen(args: args));
+            case '/shop_inbox':
+              return MaterialPageRoute(builder: (_) => const ShopInboxScreen());
             case '/shippers_live':
               return MaterialPageRoute(
                 builder: (_) => const ShippersLiveScreen(),

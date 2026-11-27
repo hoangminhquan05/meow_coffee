@@ -66,6 +66,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _password.text,
       );
       if (!mounted) return;
+      // Chờ hồ sơ của đúng tài khoản vừa tạo (tài khoản Firebase hiện tại).
       final error = await context.read<SessionProvider>().waitForProfile();
       if (!mounted) return;
       if (error != null) {
