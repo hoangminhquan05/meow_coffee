@@ -4,11 +4,16 @@ import 'package:provider/provider.dart';
 import '../../core/enums.dart';
 import '../../models/order.dart';
 import '../../providers/session_provider.dart';
+import '../../models/shipper_status.dart';
+import '../../providers/shop_settings_provider.dart';
+import '../../services/dispatch_service.dart';
+import '../../services/online_order_service.dart';
 import '../../services/staff_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/meow_ui.dart';
 import '../../widgets/reason_sheet.dart';
+import 'dispatch_widgets.dart';
 
 /// Nhãn nút bước kế tiếp theo trạng thái hiện tại.
 String? nextStepLabel(OrderStatus s) => switch (s) {
@@ -30,13 +35,41 @@ class OnlineOrderActions {
   static void _toast(BuildContext context, String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  static String _error(Object e) =>
-      e is StateError ? e.message : 'Lỗi: $e';
+  static String _error(Object e) => switch (e) {
+        StateError() => e.message,
+        OnlineOrderError() => e.message,
+        _ => 'Lỗi: $e',
+      };
+
+  /// Lý do hủy đơn đã giao thất bại (không hoàn tiền – O21).
+  static const failedCancelReasons = [
+    'Khách không nhận hàng',
+    'Không liên lạc được khách',
+    'Sai địa chỉ, khách không xác nhận lại',
+    'Khác',
+  ];
+
+  static Future<bool> _try(
+      BuildContext context, Future<void> Function() action, String done) async {
+    try {
+      await action();
+      if (context.mounted) _toast(context, done);
+      return true;
+    } catch (e) {
+      if (context.mounted) _toast(context, _error(e));
+      return false;
+    }
+  }
 
   /// Chuyển bước kế tiếp. Trả về true nếu thành công.
   static Future<bool> advance(BuildContext context, Order order) async {
     final (by, role) = _actor(context);
     final to = StaffOrderService.nextStep[order.status];
+    // Pha xong: qua Worker để chuyển Sẵn sàng và mời shipper cùng lúc (bước 9).
+    if (order.status == OrderStatus.preparing) {
+      return _try(context, () => DispatchService.markReady(order.id),
+          '${order.orderCode}: Sẵn sàng – đang tìm shipper');
+    }
     try {
       await StaffOrderService.advance(
           orderId: order.id, from: order.status, by: by, role: role);
@@ -65,6 +98,11 @@ class OnlineOrderActions {
       confirmLabel: reject ? 'Từ chối đơn' : 'Hủy đơn',
     );
     if (reason == null || !context.mounted) return false;
+    // Đơn Sẵn sàng có thể đang mời / đã giao cho shipper → Worker gỡ khỏi shipper.
+    if (order.status == OrderStatus.ready) {
+      return _try(context, () => DispatchService.cancel(order.id, reason),
+          'Đã hủy ${order.orderCode}');
+    }
     final (by, role) = _actor(context);
     try {
       await StaffOrderService.cancelByShop(
@@ -77,6 +115,60 @@ class OnlineOrderActions {
       if (context.mounted) _toast(context, _error(e));
       return false;
     }
+  }
+
+  /// Mời lại từ đầu (kể cả shipper đã từ chối).
+  static Future<bool> retry(BuildContext context, Order order) => _try(context,
+      () => DispatchService.retry(order.id), 'Đang mời shipper cho ${order.orderCode}');
+
+  /// Gán thẳng / đổi shipper (đơn chưa lấy hàng).
+  static Future<bool> assign(BuildContext context, Order order) async {
+    final picked = await showModalBottomSheet<ShipperStatus>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => PickShipperSheet(currentId: order.delivery?.shipper?.id),
+    );
+    if (picked == null || !context.mounted) return false;
+    return _try(context, () => DispatchService.assign(order.id, picked.uid),
+        'Đã giao ${order.orderCode} cho ${picked.name}');
+  }
+
+  /// Giao thất bại → giao lại (+1 lần phí ship nếu đang bật phí – O33).
+  static Future<bool> redeliver(BuildContext context, Order order) async {
+    final fee = context.read<ShopSettingsProvider>().settings.shippingFee.enabled
+        ? order.deliveryFee
+        : 0;
+    final ok = await showMeowConfirmDialog(
+      context,
+      title: 'Giao lại ${order.orderCode}?',
+      message: fee > 0
+          ? 'Đơn được cộng thêm ${formatMoney(fee)} phí giao lại – shipper thu tiền mặt '
+              'khi giao. Hệ thống sẽ tìm shipper mới.'
+          : 'Đơn quay về "Sẵn sàng" và hệ thống tìm shipper mới.',
+      confirmLabel: 'Giao lại',
+      isDanger: false,
+      icon: Icons.replay_rounded,
+    );
+    if (!ok || !context.mounted) return false;
+    return _try(context, () => DispatchService.redeliver(order.id),
+        'Đang tìm shipper giao lại ${order.orderCode}');
+  }
+
+  /// Hủy đơn đã giao thất bại – không hoàn tiền (O21).
+  static Future<bool> cancelFailed(BuildContext context, Order order) async {
+    final reason = await showReasonSheet(
+      context,
+      title: 'Hủy đơn ${order.orderCode}',
+      message: 'Đơn giao không thành công – hủy đơn sẽ KHÔNG hoàn tiền cho khách.',
+      reasons: failedCancelReasons,
+      confirmLabel: 'Hủy đơn',
+    );
+    if (reason == null || !context.mounted) return false;
+    return _try(context, () => DispatchService.cancel(order.id, reason),
+        'Đã hủy ${order.orderCode}');
   }
 
   /// Bỏ món (O16): chọn số ly bỏ + lý do.

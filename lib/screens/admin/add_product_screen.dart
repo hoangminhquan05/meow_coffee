@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +9,7 @@ import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
 import '../../widgets/price_inputs.dart';
+import '../../widgets/picked_image.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -26,7 +25,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
 
-  File? _pickedImage;
+  XFile? _pickedImage;
   bool _isUploading = false;
 
   @override
@@ -42,7 +41,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (_isUploading) return;
     final file = await _picker.pickImage(source: ImageSource.gallery);
     if (file != null && mounted) {
-      setState(() => _pickedImage = File(file.path));
+      setState(() => _pickedImage = file);
     }
   }
 
@@ -141,8 +140,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ],
                         )
                       : _pickedImage != null
-                          ? Image.file(
-                              _pickedImage!,
+                          ? PickedImage(file: _pickedImage!,
                               width: double.infinity,
                               height: double.infinity,
                               fit: BoxFit.cover,

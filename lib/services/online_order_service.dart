@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/env_config.dart';
@@ -77,8 +79,20 @@ class OnlineOrderService {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 25));
-    } catch (_) {
-      throw const OnlineOrderError('network', 'Không kết nối được máy chủ, vui lòng thử lại');
+    } on TimeoutException {
+      // Máy chủ có thể vẫn đang xử lý xong – màn hình tự cập nhật qua Firestore.
+      throw const OnlineOrderError(
+        'timeout',
+        'Máy chủ phản hồi quá lâu. Thao tác có thể đã được thực hiện – '
+            'hãy xem lại trạng thái đơn trước khi bấm lại.',
+      );
+    } catch (e) {
+      debugPrint('POST $path lỗi kết nối: $e');
+      throw const OnlineOrderError(
+        'network',
+        'Không kết nối được máy chủ. Thao tác có thể đã được thực hiện – '
+            'hãy xem lại trạng thái đơn trước khi bấm lại.',
+      );
     }
     Map<String, dynamic> json;
     try {

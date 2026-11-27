@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +10,7 @@ import '../../providers/session_provider.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
+import '../../widgets/picked_image.dart';
 
 class EditUserInfoScreen extends StatefulWidget {
   final String? userId;
@@ -33,7 +32,7 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
   bool get _isCustomer => context.read<SessionProvider>().isCustomer;
 
   String _avtUrl = '';
-  File? _pickedImage;
+  XFile? _pickedImage;
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
@@ -96,7 +95,7 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
   Future<void> _pickImage() async {
     final file = await _picker.pickImage(source: ImageSource.gallery);
     if (file != null && mounted) {
-      setState(() => _pickedImage = File(file.path));
+      setState(() => _pickedImage = file);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ảnh đã được chọn')),
       );
@@ -162,7 +161,7 @@ class _EditUserInfoScreenState extends State<EditUserInfoScreen> {
 
   Widget _buildAvatar() {
     if (_pickedImage != null) {
-      return Image.file(_pickedImage!, fit: BoxFit.cover);
+      return PickedImage(file: _pickedImage!, fit: BoxFit.cover);
     }
     if (_avtUrl.isNotEmpty) {
       return CachedNetworkImage(

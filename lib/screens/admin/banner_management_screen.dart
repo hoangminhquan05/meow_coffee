@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +7,7 @@ import '../../models/banner_model.dart';
 import '../../providers/banner_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/meow_ui.dart';
+import '../../widgets/picked_image.dart';
 
 class BannerManagementScreen extends StatefulWidget {
   const BannerManagementScreen({super.key});
@@ -353,7 +352,7 @@ class _BannerDialog extends StatefulWidget {
 class _BannerDialogState extends State<_BannerDialog> {
   late final TextEditingController _nameController;
   final ImagePicker _picker = ImagePicker();
-  File? _pickedImage;
+  XFile? _pickedImage;
   bool _isSaving = false;
   String? _errorText;
 
@@ -379,7 +378,7 @@ class _BannerDialogState extends State<_BannerDialog> {
       if (!mounted) return;
       if (file != null) {
         setState(() {
-          _pickedImage = File(file.path);
+          _pickedImage = file;
           _errorText = null;
         });
       }
@@ -502,8 +501,7 @@ class _BannerDialogState extends State<_BannerDialog> {
                   child: SizedBox(
                     width: dialogWidth - 44,
                     height: 150,
-                    child: Image.file(
-                      _pickedImage!,
+                    child: PickedImage(file: _pickedImage!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => Container(
                         color: AppColors.soft,

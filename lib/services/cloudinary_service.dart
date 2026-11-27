@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../config/env_config.dart';
 
@@ -24,7 +24,7 @@ class CloudinaryService {
   }
 
   Future<String> uploadImage(
-    File file, {
+    XFile file, {
     String? folder,
     String? publicId,
   }) async {
@@ -60,7 +60,12 @@ class CloudinaryService {
       request.fields['public_id'] = publicId;
     }
 
-    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+    // Đọc bytes thay vì đường dẫn để chạy được cả trên web.
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      await file.readAsBytes(),
+      filename: file.name.isEmpty ? 'image.jpg' : file.name,
+    ));
 
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);

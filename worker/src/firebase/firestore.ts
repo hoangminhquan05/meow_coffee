@@ -72,11 +72,70 @@ export interface FsWrite {
   /** Chỉ ghi các trường này (giữ nguyên phần còn lại của doc). */
   updateMask?: { fieldPaths: string[] };
   currentDocument?: { exists?: boolean; updateTime?: string };
-  updateTransforms?: (
-    | { fieldPath: string; setToServerValue: 'REQUEST_TIME' }
-    | { fieldPath: string; appendMissingElements: { values: FsValue[] } }
-  )[];
+  updateTransforms?: FsTransform[];
 }
+
+export type FsTransform =
+  | { fieldPath: string; setToServerValue: 'REQUEST_TIME' }
+  | { fieldPath: string; appendMissingElements: { values: FsValue[] } }
+  | { fieldPath: string; removeAllFromArray: { values: FsValue[] } }
+  | { fieldPath: string; increment: FsValue };
+
+/** Biến { "a.b": 1, "c": 2 } thành { a: { b: 1 }, c: 2 } (để ghi theo updateMask). */
+export function nestFields(flat: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, value] of Object.entries(flat)) {
+    const parts = path.split('.');
+    let cur = out;
+    for (const p of parts.slice(0, -1)) {
+      if (!cur[p] || typeof cur[p] !== 'object' || cur[p] instanceof Ts || Array.isArray(cur[p])) cur[p] = {};
+      cur = cur[p] as Record<string, unknown>;
+    }
+    cur[parts[parts.length - 1]] = value;
+  }
+  return out;
+}
+
+/** Ghi một số trường (có thể lồng "a.b") của doc, giữ nguyên phần còn lại. */
+export function patchWrite(
+  name: string,
+  flat: Record<string, unknown>,
+  opts: {
+    updateTime?: string;
+    exists?: boolean;
+    transforms?: FsTransform[];
+  } = {},
+): FsWrite {
+  const precondition =
+    opts.updateTime !== undefined
+      ? { updateTime: opts.updateTime }
+      : opts.exists !== undefined
+        ? { exists: opts.exists }
+        : undefined;
+  return {
+    update: { name, fields: encodeFields(nestFields(flat)) },
+    updateMask: { fieldPaths: Object.keys(flat) },
+    ...(precondition ? { currentDocument: precondition } : {}),
+    ...(opts.transforms?.length ? { updateTransforms: opts.transforms } : {}),
+  };
+}
+
+export const serverTime = (fieldPath: string): FsTransform => ({
+  fieldPath,
+  setToServerValue: 'REQUEST_TIME',
+});
+export const arrayAppend = (fieldPath: string, ...values: unknown[]): FsTransform => ({
+  fieldPath,
+  appendMissingElements: { values: values.map(encodeValue) },
+});
+export const arrayRemove = (fieldPath: string, ...values: unknown[]): FsTransform => ({
+  fieldPath,
+  removeAllFromArray: { values: values.map(encodeValue) },
+});
+export const increment = (fieldPath: string, by: number): FsTransform => ({
+  fieldPath,
+  increment: encodeValue(by),
+});
 
 export class FirestoreError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
@@ -124,8 +183,20 @@ export class Firestore {
     return body;
   }
 
-  /** Đọc một doc; không tồn tại → null. */
+  /** Phiên đọc của runOptimistic: tên doc → updateTime lúc đọc (null = chưa có). */
+  private readonly sessions = new Map<string, Map<string, string | null>>();
+
+  /**
+   * Đọc một doc; không tồn tại → null. `transaction` là mã transaction thật
+   * (runTransaction) hoặc mã phiên của runOptimistic (đọc thường + ghi nhớ phiên bản).
+   */
   async get(path: string, transaction?: string): Promise<FsDoc | null> {
+    const session = transaction ? this.sessions.get(transaction) : undefined;
+    if (session) {
+      const doc = await this.get(path);
+      session.set(this.docName(path), doc?.updateTime ?? null);
+      return doc;
+    }
     const qs = transaction ? `?transaction=${encodeURIComponent(transaction)}` : '';
     try {
       const doc = (await this.call(`${this.base}/${path}${qs}`)) as {
@@ -235,6 +306,49 @@ export class Firestore {
       method: 'POST',
       body: JSON.stringify({ transaction }),
     }).catch(() => undefined);
+  }
+
+  /**
+   * Giống runTransaction nhưng KHÔNG giữ khóa: đọc thường, rồi ghi một lần kèm
+   * điều kiện "doc chưa đổi kể từ lúc đọc" (currentDocument.updateTime) cho mọi
+   * doc đã đọc; có người sửa xen giữa → đọc lại và thử lại.
+   * Dùng cho các thao tác giao hàng: Worker bị ngắt giữa chừng (hết giờ, khách
+   * đóng kết nối) không để lại khóa làm các request sau phải chờ.
+   * Không dùng cho bộ đếm cần tăng tuần tự (createOrder vẫn dùng runTransaction).
+   */
+  async runOptimistic<T>(fn: (session: string) => Promise<{ writes: FsWrite[]; result: T }>): Promise<T> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const session = `opt_${crypto.randomUUID()}`;
+      const seen = new Map<string, string | null>();
+      this.sessions.set(session, seen);
+      try {
+        const { writes, result } = await fn(session);
+        if (writes.length > 0) {
+          await this.commit(
+            writes.map((w) =>
+              w.currentDocument || !seen.has(w.update.name)
+                ? w
+                : {
+                    ...w,
+                    currentDocument: seen.get(w.update.name)
+                      ? { updateTime: seen.get(w.update.name)! }
+                      : { exists: false },
+                  },
+            ),
+          );
+        }
+        return result;
+      } catch (e) {
+        const retryable =
+          e instanceof FirestoreError &&
+          (e.code === 'FAILED_PRECONDITION' || e.code === 'ABORTED' || e.status === 409);
+        if (!retryable || attempt === 4) throw e;
+        await new Promise((r) => setTimeout(r, 50 * 2 ** attempt));
+      } finally {
+        this.sessions.delete(session);
+      }
+    }
+    throw new Error('unreachable');
   }
 
   /** Chạy transaction, tự thử lại khi bị ABORTED (xung đột ghi). */

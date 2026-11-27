@@ -6,7 +6,13 @@ compatibility_date = "2025-09-01"
 workers_dev = true
 preview_urls = false
 
-# Mỗi phút: hủy đơn VietQR quá hạn chuyển khoản.
+# Firestore của project ở Mỹ (nam5): mỗi request gọi Firestore nhiều lượt liên
+# tiếp, nên để Cloudflare tự đặt Worker gần Google thay vì gần người dùng.
+[placement]
+mode = "smart"
+
+# Mỗi phút: hủy đơn VietQR quá hạn; tự kết thúc ca shipper mất GPS;
+# lời mời giao đơn quá 60s → mời người tiếp; đơn chưa có shipper → mời lại.
 [triggers]
 crons = ["* * * * *"]
 

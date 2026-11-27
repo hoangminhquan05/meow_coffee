@@ -13,4 +13,5 @@ class FsCollections {
   static const carts = 'carts';
   static const shipperStatus = 'shipper_status';
   static const shipperShifts = 'shipper_shifts';
+  static const dispatchOffers = 'dispatch_offers';
 }

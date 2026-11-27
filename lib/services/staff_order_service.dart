@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../core/enums.dart';
 import '../core/firestore_paths.dart';
 import '../models/order.dart';
+import '../models/shipper_status.dart';
 
 /// NV/admin xử lý đơn online (bước 7): xác nhận, từ chối/hủy, pha chế, bỏ món,
 /// và admin đánh dấu đã hoàn tiền. Ghi thẳng Firestore trong transaction
@@ -64,6 +65,17 @@ class StaffOrderService {
       .map((s) => s.docs.map(Order.fromDoc).toList()
         ..sort((a, b) => (a.createdAt ?? DateTime(2100))
             .compareTo(b.createdAt ?? DateTime(2100))));
+
+  /// Đơn online giao thành công trong ngày `day` (mới giao nhất trước).
+  /// Lọc theo `delivery.done_day` (Worker ghi khi shipper bấm Đã giao).
+  static Stream<List<Order>> watchDeliveredOn(DateTime day) => _orders
+      .where('channel', isEqualTo: OrderChannel.online.value)
+      .where('status', isEqualTo: OrderStatus.completed.value)
+      .where('delivery.done_day', isEqualTo: ShipperStatus.dayKey(day))
+      .snapshots()
+      .map((s) => s.docs.map(Order.fromDoc).toList()
+        ..sort((a, b) => (b.delivery?.deliveredAt ?? DateTime(0))
+            .compareTo(a.delivery?.deliveredAt ?? DateTime(0))));
 
   /// Đơn còn phải hoàn tiền (chỉ admin đọc được hết).
   static Stream<List<Order>> watchPendingRefunds() => _orders

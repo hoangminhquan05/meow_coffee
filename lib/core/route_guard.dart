@@ -50,7 +50,7 @@ const _customerRoutes = {
 };
 
 /// Màn giao hàng: chỉ shipper.
-const _shipperRoutes = {'/shipper'};
+const _shipperRoutes = {'/shipper', '/shipper_order'};
 
 /// Trả về route thay thế nếu `role` không được mở `name`; null nếu được mở.
 /// Chưa đăng nhập (role null) thì không chặn – các màn đều cần đăng nhập

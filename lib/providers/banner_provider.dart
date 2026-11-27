@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../config/env_config.dart';
 import '../core/firestore_paths.dart';
@@ -56,7 +55,7 @@ class BannerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String> uploadBannerImage(File file) async {
+  Future<String> uploadBannerImage(XFile file) async {
     _isUploading = true;
     notifyListeners();
     try {

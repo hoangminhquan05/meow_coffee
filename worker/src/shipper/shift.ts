@@ -7,6 +7,7 @@
 import type { FirebaseUserClaims } from '../firebase/idToken';
 import { encodeFields, Firestore, FirestoreError, Ts, type FsDoc, type FsWrite } from '../firebase/firestore';
 import { OrderRuleError } from '../orders/rules';
+import { hasLiveOffer } from '../dispatch/dispatch';
 
 /** Không nhận GPS quá chừng này phút → tự kết thúc ca. */
 export const SHIFT_STALE_MIN = 15;
@@ -131,6 +132,7 @@ export async function handleShift(
       location_updated_at: new Ts(now),
       shift_started_at: new Ts(now),
       shift_declines: 0,
+      pending_offer: null,
       active_order_ids: activeOrders(status?.data),
     };
     await db.commit([
@@ -166,7 +168,14 @@ export async function handleShift(
     return { on_shift: false, shift_id: null, shippers_on_shift: await refreshShopLive(db) };
   }
   if (activeOrders(status!.data).length > 0) {
-    throw new OrderRuleError(409, 'has_orders', 'Bạn còn đơn đang giữ – giao xong mới kết thúc ca');
+    throw new OrderRuleError(
+      409,
+      'has_orders',
+      'Bạn còn đơn đang giữ – giao xong (hoặc nhờ quán đổi shipper) mới kết thúc ca',
+    );
+  }
+  if (hasLiveOffer(status!.data, now)) {
+    throw new OrderRuleError(409, 'has_offer', 'Bạn đang có lời mời giao đơn – hãy trả lời trước');
   }
   await db.commit(endShiftWrites(db, status!, 'manual', now));
   return { on_shift: false, shift_id: null, shippers_on_shift: await refreshShopLive(db) };

@@ -210,6 +210,19 @@ class _ShipperTile extends StatelessWidget {
                     color: stale ? AppColors.danger : AppColors.muted,
                   ),
                 ),
+                if (s.codHolding > 0)
+                  Text('COD đang giữ ${formatMoney(s.codHolding)}',
+                      style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                // O35: từ lần thứ 3 trong ca báo cho quản lý (push ở bước 11).
+                if (s.shiftDeclines >= 2)
+                  Text(
+                    'Từ chối/bỏ lỡ ${s.shiftDeclines} lời mời trong ca',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: s.shiftDeclines >= 3 ? AppColors.danger : AppColors.warning,
+                    ),
+                  ),
               ],
             ),
           ),

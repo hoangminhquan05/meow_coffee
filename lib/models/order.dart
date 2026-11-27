@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 
+import 'package:latlong2/latlong.dart';
+
 import '../core/enums.dart';
 import 'product.dart';
 
@@ -111,6 +113,18 @@ class Order {
   /// Hoàn tiền thủ công cho đơn đã trả trước (O32); null nếu không cần.
   final OrderRefund? refund;
 
+  /// Gán shipper (bước 9); null nếu đơn chưa tới "Sẵn sàng".
+  final OrderDispatch? dispatch;
+
+  /// Phí phát sinh (giao lại – O33).
+  final List<ExtraFee> extraFees;
+
+  /// Các lần giao không thành công.
+  final List<FailedAttempt> failedAttempts;
+
+  /// Tiền shipper đã thu khi giao (COD / phí giao lại).
+  final int codAmount;
+
   const Order({
     required this.id,
     required this.orderCode,
@@ -137,7 +151,23 @@ class Order {
     this.paymentExpiresAt,
     this.itemChanges = const [],
     this.refund,
+    this.dispatch,
+    this.extraFees = const [],
+    this.failedAttempts = const [],
+    this.codAmount = 0,
   });
+
+  /// Tổng phí phát sinh.
+  int get extraFeeTotal => extraFees.fold(0, (s, f) => s + f.amount);
+
+  /// Số tiền shipper phải thu khi giao (giống Worker amountToCollect):
+  /// COD thu cả đơn; VietQR chỉ thu phí giao lại.
+  int get amountToCollect {
+    if (paymentMethod == PaymentMethod.cash) {
+      return paymentStatus == PaymentStatus.paid ? 0 : total;
+    }
+    return extraFeeTotal;
+  }
 
   /// Phí giao hàng (0 nếu không phải đơn giao).
   int get deliveryFee => delivery?.fee ?? 0;
@@ -213,6 +243,18 @@ class Order {
       refund: map['refund'] is Map
           ? OrderRefund.fromMap(Map<String, dynamic>.from(map['refund']))
           : null,
+      dispatch: map['dispatch'] is Map
+          ? OrderDispatch.fromMap(Map<String, dynamic>.from(map['dispatch']))
+          : null,
+      extraFees: (map['extra_fees'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((m) => ExtraFee.fromMap(Map<String, dynamic>.from(m)))
+          .toList(),
+      failedAttempts: (map['failed_attempts'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((m) => FailedAttempt.fromMap(Map<String, dynamic>.from(m)))
+          .toList(),
+      codAmount: map['cod'] is Map ? toInt((map['cod'] as Map)['amount']) : 0,
     );
   }
 
@@ -245,6 +287,12 @@ class OrderDelivery {
   final int fee;
   final PersonRef? shipper;
   final String? shipperPhone;
+  final LatLng? location;
+  final DateTime? assignedAt;
+  final DateTime? pickedUpAt;
+  final DateTime? arrivedAt;
+  final DateTime? deliveredAt;
+  final List<DateTime> callAttempts;
 
   const OrderDelivery({
     required this.receiverName,
@@ -256,10 +304,18 @@ class OrderDelivery {
     required this.fee,
     this.shipper,
     this.shipperPhone,
+    this.location,
+    this.assignedAt,
+    this.pickedUpAt,
+    this.arrivedAt,
+    this.deliveredAt,
+    this.callAttempts = const [],
   });
 
   factory OrderDelivery.fromMap(Map<String, dynamic> m) {
     final shipper = m['shipper'];
+    final loc = m['location'];
+    DateTime? ts(dynamic v) => v is Timestamp ? v.toDate() : null;
     return OrderDelivery(
       receiverName: m['receiver_name']?.toString() ?? '',
       receiverPhone: m['receiver_phone']?.toString() ?? '',
@@ -270,6 +326,17 @@ class OrderDelivery {
       fee: (m['fee'] as num?)?.round() ?? 0,
       shipper: shipper is Map ? PersonRef.fromMap(shipper) : null,
       shipperPhone: shipper is Map ? shipper['phone']?.toString() : null,
+      location: loc is Map && loc['lat'] is num && loc['lng'] is num
+          ? LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble())
+          : null,
+      assignedAt: ts(m['assigned_at']),
+      pickedUpAt: ts(m['picked_up_at']),
+      arrivedAt: ts(m['arrived_at']),
+      deliveredAt: ts(m['delivered_at']),
+      callAttempts: (m['call_attempts'] as List<dynamic>? ?? const [])
+          .whereType<Timestamp>()
+          .map((t) => t.toDate())
+          .toList(),
     );
   }
 }
@@ -366,6 +433,99 @@ class OrderRefund {
       doneBy: m['done_by'] is Map ? PersonRef.fromMap(m['done_by']) : null,
       doneAt: at is Timestamp ? at.toDate() : null,
       note: m['note']?.toString() ?? '',
+    );
+  }
+}
+
+enum DispatchState {
+  searching,
+  offering,
+  assigned,
+  noShipper;
+
+  static DispatchState fromValue(String? v) => switch (v) {
+        'offering' => offering,
+        'assigned' => assigned,
+        'no_shipper' => noShipper,
+        _ => searching,
+      };
+}
+
+/// `orders.dispatch` – lời mời shipper (Worker ghi).
+class OrderDispatch {
+  final DispatchState state;
+  final PersonRef? offeredTo;
+  final String? offerId;
+  final DateTime? expiresAt;
+  final List<String> declinedBy;
+  final int attempts;
+  final PersonRef? manualBy;
+
+  const OrderDispatch({
+    required this.state,
+    this.offeredTo,
+    this.offerId,
+    this.expiresAt,
+    this.declinedBy = const [],
+    this.attempts = 0,
+    this.manualBy,
+  });
+
+  factory OrderDispatch.fromMap(Map<String, dynamic> m) {
+    final exp = m['expires_at'];
+    return OrderDispatch(
+      state: DispatchState.fromValue(m['state'] as String?),
+      offeredTo: m['offered_to'] is Map ? PersonRef.fromMap(m['offered_to']) : null,
+      offerId: m['offer_id'] as String?,
+      expiresAt: exp is Timestamp ? exp.toDate() : null,
+      declinedBy: (m['declined_by'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      attempts: (m['attempts'] as num?)?.round() ?? 0,
+      manualBy: m['manual_by'] is Map ? PersonRef.fromMap(m['manual_by']) : null,
+    );
+  }
+}
+
+class ExtraFee {
+  final String reason;
+  final int amount;
+  final DateTime? at;
+
+  const ExtraFee({required this.reason, required this.amount, this.at});
+
+  String get label => reason == 'redelivery' ? 'Phí giao lại' : 'Phí phát sinh';
+
+  factory ExtraFee.fromMap(Map<String, dynamic> m) {
+    final at = m['at'];
+    return ExtraFee(
+      reason: m['reason']?.toString() ?? '',
+      amount: (m['amount'] as num?)?.round() ?? 0,
+      at: at is Timestamp ? at.toDate() : null,
+    );
+  }
+}
+
+class FailedAttempt {
+  final DateTime? at;
+  final PersonRef by;
+  final String reason;
+  final int callAttempts;
+
+  const FailedAttempt({
+    required this.at,
+    required this.by,
+    required this.reason,
+    this.callAttempts = 0,
+  });
+
+  factory FailedAttempt.fromMap(Map<String, dynamic> m) {
+    final at = m['at'];
+    return FailedAttempt(
+      at: at is Timestamp ? at.toDate() : null,
+      by: PersonRef.fromMap(m['by']),
+      reason: m['reason']?.toString() ?? '',
+      callAttempts: (m['call_attempts'] as num?)?.round() ?? 0,
     );
   }
 }

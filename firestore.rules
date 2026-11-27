@@ -69,6 +69,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Nhật ký lời mời giao đơn (Worker ghi) – cho màn Hiệu suất shipper (O36).
+    match /dispatch_offers/{id} {
+      allow read: if isAdmin()
+        || (isActive() && resource.data.shipper.id == request.auth.uid);
+      allow write: if false;
+    }
+
     match /banners/{id} {
       allow read: if isActive();
       allow write: if isAdmin();
@@ -108,20 +115,21 @@ service cloud.firestore {
             && a.refund.amount is int && a.refund.amount > 0)
         : a.get('refund', null) == resource.data.get('refund', null);
     }
-    // Xác nhận → bắt đầu pha → pha xong.
+    // Xác nhận → bắt đầu pha. "Pha xong" (→ ready) đi qua Worker POST /dispatch
+    // để mời shipper cùng lúc (bước 9).
     function staffAdvanceOk() {
       let from = resource.data.status;
       let to = request.resource.data.status;
       return ((from == 'pending' && to == 'confirmed')
-              || (from == 'confirmed' && to == 'preparing')
-              || (from == 'preparing' && to == 'ready'))
+              || (from == 'confirmed' && to == 'preparing'))
         && onlyChanges(['status', 'status_history', 'updated_at'])
         && historyAppended();
     }
-    // Từ chối / hủy trước khi shipper lấy hàng.
+    // Từ chối / hủy trước khi pha xong. Đơn đã Sẵn sàng có thể đang mời / đã giao
+    // cho shipper → hủy qua Worker (gỡ khỏi shipper_status).
     function staffCancelOk() {
       let a = request.resource.data;
-      return resource.data.status in ['pending', 'confirmed', 'preparing', 'ready']
+      return resource.data.status in ['pending', 'confirmed', 'preparing']
         && a.status == 'cancelled'
         && a.cancel_reason is string && a.cancel_reason.size() > 0
         && a.cancelled_by.id == request.auth.uid
@@ -167,7 +175,16 @@ service cloud.firestore {
         || (isSeller() && resource.data.get('seller', {}).get('id', '') == request.auth.uid)
         || (isSeller() && resource.data.channel == 'online')
         || (isActive() && resource.data.channel == 'online'
-            && resource.data.customer.id == request.auth.uid);
+            && resource.data.customer.id == request.auth.uid)
+        // Shipper (bước 9): đơn mình đang/đã giao, hoặc đơn đang mời mình
+        // (chỉ đơn online mới có delivery.shipper / dispatch). Không kiểm
+        // `channel` ở đây để truy vấn "Đơn đã giao hôm nay" (lọc theo
+        // delivery.shipper.id) chứng minh được quyền đọc.
+        // Mọi thao tác giao hàng đi qua Worker nên shipper không có quyền ghi.
+        || (isActive() && me().role == 'shipper'
+            && resource.data.delivery.shipper.id == request.auth.uid)
+        || (isActive() && me().role == 'shipper'
+            && resource.data.dispatch.offered_to.id == request.auth.uid);
 
       // Xử lý đơn online (bước 7).
       allow update: if isSeller() && resource.data.channel == 'online'

@@ -5,13 +5,16 @@ import 'package:provider/provider.dart';
 
 import '../../core/enums.dart';
 import '../../models/order.dart';
+import '../../models/shipper_status.dart';
 import '../../providers/online_orders_provider.dart';
 import '../../providers/shop_settings_provider.dart';
+import '../../services/staff_order_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/meow_ui.dart';
 import '../online/my_orders_screen.dart' show StatusChip;
+import 'dispatch_widgets.dart';
 import 'online_order_actions.dart';
 
 /// Một tab của màn Đơn online (O14).
@@ -44,18 +47,48 @@ class OnlineOrdersScreen extends StatefulWidget {
 class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
   Timer? _ticker;
 
+  // Tab "Giao thành công": đơn giao xong hôm nay (đổi ngày thì nghe lại).
+  StreamSubscription<List<Order>>? _doneSub;
+  String _doneDay = '';
+  List<Order>? _done;
+  Object? _doneError;
+
   @override
   void initState() {
     super.initState();
-    // Cập nhật "x phút trước".
+    _watchDone();
+    // Cập nhật "x phút trước" và sang ngày mới.
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      _watchDone();
+      setState(() {});
     });
+  }
+
+  void _watchDone() {
+    final now = DateTime.now();
+    final day = ShipperStatus.dayKey(now);
+    if (day == _doneDay) return;
+    _doneDay = day;
+    _doneSub?.cancel();
+    _doneSub = StaffOrderService.watchDeliveredOn(now).listen(
+      (list) {
+        if (!mounted) return;
+        setState(() {
+          _done = list;
+          _doneError = null;
+        });
+      },
+      onError: (Object e) {
+        if (mounted) setState(() => _doneError = e);
+      },
+    );
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _doneSub?.cancel();
     super.dispose();
   }
 
@@ -63,7 +96,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<OnlineOrdersProvider>();
     return DefaultTabController(
-      length: _columns.length,
+      length: _columns.length + 1,
       child: Scaffold(
         backgroundColor: AppColors.bg,
         bottomNavigationBar: const BottomNavBar(currentIndex: 3),
@@ -92,6 +125,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
               for (final c in _columns)
                 Tab(child: _TabLabel(c.label, provider.byStatuses(c.statuses).length,
                     highlight: c.statuses.contains(OrderStatus.pending))),
+              Tab(child: _TabLabel('Giao thành công', _done?.length ?? 0)),
             ],
           ),
         ),
@@ -120,6 +154,7 @@ class _OnlineOrdersScreenState extends State<OnlineOrdersScreen> {
             children: [
               for (final c in _columns)
                 _OrderList(orders: provider.byStatuses(c.statuses), empty: c.empty),
+              _DeliveredList(orders: _done, error: _doneError),
             ],
           );
         }),
@@ -181,6 +216,160 @@ class _OrderList extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, i) =>
           OnlineOrderCard(key: ValueKey(orders[i].id), order: orders[i]),
+    );
+  }
+}
+
+/// Tab "Giao thành công": đơn giao xong hôm nay, mỗi thẻ là chi tiết đơn.
+class _DeliveredList extends StatelessWidget {
+  final List<Order>? orders;
+  final Object? error;
+
+  const _DeliveredList({required this.orders, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Lỗi tải đơn đã giao: $error',
+              textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
+        ),
+      );
+    }
+    final list = orders;
+    if (list == null) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.brand));
+    }
+    if (list.isEmpty) {
+      return const Center(
+        child: Text('Hôm nay chưa có đơn giao thành công',
+            style: TextStyle(color: AppColors.muted)),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: list.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (_, i) => _DeliveredOrderCard(key: ValueKey(list[i].id), order: list[i]),
+    );
+  }
+}
+
+class _DeliveredOrderCard extends StatelessWidget {
+  final Order order;
+
+  const _DeliveredOrderCard({super.key, required this.order});
+
+  String _time(DateTime? t) => t == null ? '–' : formatDateTime(t).split(' ').last;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = order.delivery;
+    final took = d?.pickedUpAt != null && d?.deliveredAt != null
+        ? d!.deliveredAt!.difference(d.pickedUpAt!).inMinutes
+        : null;
+    const label = TextStyle(fontSize: 12, color: AppColors.muted);
+    return MeowCard(
+      padding: const EdgeInsets.all(14),
+      onTap: () => Navigator.pushNamed(context, '/online_order', arguments: order.id),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+              const SizedBox(width: 6),
+              Text(order.orderCode,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Text('Giao lúc ${_time(d?.deliveredAt)}',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const Divider(height: 18),
+          // Giao cho ai
+          Text('${d?.receiverName ?? order.customer?.name ?? ''} · ${d?.receiverPhone ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(d?.addressText ?? '', style: const TextStyle(fontSize: 13, height: 1.35)),
+          if ((d?.note ?? '').isNotEmpty)
+            Text('Ghi chú cho shipper: ${d!.note}',
+                style: const TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic)),
+          const SizedBox(height: 8),
+          // Món
+          for (final i in order.items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1.5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${i.displayName} × ${i.quantity}'
+                      '${i.note.isNotEmpty ? '\n   Ghi chú: ${i.note}' : ''}',
+                      style: const TextStyle(fontSize: 13.5, height: 1.35),
+                    ),
+                  ),
+                  Text(formatMoney(i.lineTotal), style: const TextStyle(fontSize: 13.5)),
+                ],
+              ),
+            ),
+          for (final c in order.itemChanges)
+            Text('Đã bỏ ${c.displayName} × ${c.quantity} · ${c.reason}',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.danger)),
+          if (order.note.isNotEmpty)
+            Text('Ghi chú đơn: ${order.note}',
+                style: const TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic)),
+          const Divider(height: 18),
+          Row(
+            children: [
+              const Text('Tổng đơn', style: label),
+              const Spacer(),
+              Text(formatMoney(order.total),
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.brand)),
+            ],
+          ),
+          if (order.extraFees.isNotEmpty)
+            Text('Gồm ${order.extraFees.map((f) => '${f.label.toLowerCase()} ${formatMoney(f.amount)}').join(', ')}',
+                style: label),
+          const SizedBox(height: 4),
+          // Shipper + tiền đã thu
+          Row(
+            children: [
+              const Icon(Icons.delivery_dining_rounded, size: 18, color: AppColors.brand),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${d?.shipper?.name ?? 'Shipper'}'
+                  ' · lấy hàng ${_time(d?.pickedUpAt)}'
+                  '${took != null ? ' · đi $took phút' : ''}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Icon(Icons.payments_outlined,
+                  size: 18,
+                  color: order.codAmount > 0 ? AppColors.warning : AppColors.success),
+              const SizedBox(width: 6),
+              Text(
+                order.codAmount > 0
+                    ? 'Shipper đã thu ${formatMoney(order.codAmount)}'
+                        '${order.paymentMethod == PaymentMethod.cash ? ' (COD)' : ' (phí giao lại)'}'
+                    : 'Đã trả trước (VietQR) – không thu tiền',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: order.codAmount > 0 ? AppColors.warning : AppColors.success),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -278,10 +467,40 @@ class _OnlineOrderCardState extends State<OnlineOrderCard> {
               ),
             ],
           ),
-          if (order.status == OrderStatus.ready) ...[
+          if (order.status == OrderStatus.ready ||
+              order.status == OrderStatus.delivering ||
+              order.status == OrderStatus.deliveryFailed) ...[
             const SizedBox(height: 6),
-            const Text('Chờ shipper nhận đơn',
-                style: TextStyle(fontSize: 12.5, color: AppColors.warning)),
+            DispatchInfo(order: order),
+          ],
+          if (order.status == OrderStatus.ready &&
+              order.delivery?.shipper == null &&
+              order.dispatch?.state == DispatchState.noShipper) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: MeowSecondaryButton(
+                    label: 'Mời lại',
+                    height: 40,
+                    icon: Icons.refresh_rounded,
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => OnlineOrderActions.retry(context, order)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: MeowPrimaryButton(
+                    label: 'Gán shipper',
+                    height: 40,
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => OnlineOrderActions.assign(context, order)),
+                  ),
+                ),
+              ],
+            ),
           ],
           if (next != null) ...[
             const SizedBox(height: 10),

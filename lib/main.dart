@@ -2,9 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 
 import 'config/env_config.dart';
@@ -23,6 +21,7 @@ import 'screens/admin/refunds_screen.dart';
 import 'screens/staff/online_order_detail_screen.dart';
 import 'screens/staff/online_orders_screen.dart';
 import 'screens/staff/shippers_live_screen.dart';
+import 'utils/alert_sound.dart';
 import 'utils/formatters.dart';
 import 'screens/admin/shop_settings_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -31,6 +30,7 @@ import 'screens/online/checkout_screen.dart';
 import 'screens/online/customer_cart_screen.dart';
 import 'screens/online/customer_order_detail_screen.dart';
 import 'screens/shell/role_shells.dart';
+import 'screens/shipper/shipper_order_screen.dart';
 import 'screens/admin/add_product_screen.dart';
 import 'screens/admin/add_staff_screen.dart';
 import 'screens/admin/admin_product_screen.dart';
@@ -74,8 +74,7 @@ final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Đơn mới vào "Chờ xác nhận" khi app đang mở (chưa có push – bước 11).
 void _alertNewOrder(Order order) {
-  FlutterRingtonePlayer().playNotification();
-  HapticFeedback.vibrate();
+  AlertSound.notify();
   _messengerKey.currentState
     ?..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
@@ -260,6 +259,11 @@ class MeowCoffeeApp extends StatelessWidget {
               return MaterialPageRoute(builder: (_) => const CustomerShell());
             case '/shipper':
               return MaterialPageRoute(builder: (_) => const ShipperShell());
+            case '/shipper_order':
+              final orderId = settings.arguments as String? ?? '';
+              return MaterialPageRoute(
+                builder: (_) => ShipperOrderScreen(orderId: orderId),
+              );
             case '/online_orders':
               return MaterialPageRoute(
                 builder: (_) => const OnlineOrdersScreen(),

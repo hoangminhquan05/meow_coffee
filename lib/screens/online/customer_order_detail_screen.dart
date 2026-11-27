@@ -549,7 +549,15 @@ class _ItemsCard extends StatelessWidget {
           const Divider(),
           _row('Tạm tính', formatMoney(order.subtotal)),
           _row('Phí giao hàng', fee == 0 ? 'Miễn phí' : formatMoney(fee)),
+          for (final f in order.extraFees) _row(f.label, formatMoney(f.amount)),
           _row('Tổng cộng', formatMoney(order.total), bold: true),
+          if (order.delivery?.shipper != null &&
+              (order.status == OrderStatus.ready || order.status == OrderStatus.delivering))
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('Shipper: ${order.delivery!.shipper!.name}',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ),
           const SizedBox(height: 4),
           Text(
             '${order.paymentMethod == PaymentMethod.cash ? 'Tiền mặt khi nhận hàng' : 'Chuyển khoản VietQR'}'

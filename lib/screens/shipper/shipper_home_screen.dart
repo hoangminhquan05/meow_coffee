@@ -13,9 +13,11 @@ import '../../utils/formatters.dart';
 import '../../widgets/map_location_picker.dart';
 import '../../widgets/meow_ui.dart';
 import '../staff/online_orders_screen.dart' show timeAgo;
+import 'held_orders.dart';
+import 'shift_offer_stats.dart';
 
-/// Màn chính của shipper (bước 8): bắt đầu / kết thúc ca, gửi GPS mỗi 30 giây
-/// khi app đang mở (O20). Lời mời giao đơn và đơn đang giữ: bước 9.
+/// Màn chính của shipper: bắt đầu / kết thúc ca, gửi GPS mỗi 30 giây khi app
+/// đang mở (O20), đơn đang giữ (bước 9). Lời mời giao đơn: ShipperShell.
 class ShipperHomeScreen extends StatefulWidget {
   const ShipperHomeScreen({super.key});
 
@@ -184,29 +186,25 @@ class _ShipperHomeScreenState extends State<ShipperHomeScreen>
                     ),
                     const SizedBox(height: 12),
                   ],
-                  MeowCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('ĐƠN ĐANG GIỮ',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF475569))),
-                        const SizedBox(height: 6),
-                        Text(
-                          s.activeOrderIds.isEmpty
-                              ? 'Chưa có đơn nào. Lời mời giao đơn sẽ hiện ở đây.'
-                              : '${s.activeOrderIds.length} đơn',
-                          style: const TextStyle(color: AppColors.inkSlate),
-                        ),
-                        if (s.codHolding > 0)
-                          Text('Tiền COD đang giữ: ${formatMoney(s.codHolding)}',
-                              style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ],
+                  // Lời mời trong ca: luôn hiện để shipper nắm tình trạng (O35).
+                  ShiftOfferStats(uid: _uid, shiftId: s.shiftId, compact: true),
+                  const SizedBox(height: 12),
+                  if (s.codHolding > 0) ...[
+                    MeowCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.account_balance_wallet_outlined, color: AppColors.warning),
+                          const SizedBox(width: 10),
+                          const Expanded(child: Text('Tiền COD đang giữ')),
+                          Text(formatMoney(s.codHolding),
+                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                  ],
+                  HeldOrders(orderIds: s.activeOrderIds),
                   const SizedBox(height: 16),
                   MeowSecondaryButton(
                     label: 'Kết thúc ca',

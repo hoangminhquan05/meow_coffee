@@ -10,6 +10,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/meow_ui.dart';
 import '../online/customer_order_detail_screen.dart' show RefundNotice;
 import '../online/my_orders_screen.dart' show StatusChip;
+import 'dispatch_widgets.dart';
 import 'online_order_actions.dart';
 
 /// Chi tiết đơn online cho NV/admin: khách, địa chỉ, món (bỏ món), tiền,
@@ -105,6 +106,33 @@ class _OnlineOrderDetailScreenState extends State<OnlineOrderDetailScreen> {
               ],
               _CustomerCard(order: order),
               const SizedBox(height: 12),
+              if (order.dispatch != null || order.delivery?.shipper != null) ...[
+                MeowCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('GIAO HÀNG', style: _title),
+                      const SizedBox(height: 8),
+                      DispatchInfo(order: order, detailed: true),
+                      if ((order.delivery?.shipperPhone ?? '').isNotEmpty &&
+                          order.status != OrderStatus.completed)
+                        _PhoneLine(
+                            name: 'Shipper ${order.delivery!.shipper?.name ?? ''}',
+                            phone: order.delivery!.shipperPhone!),
+                      for (final f in order.failedAttempts)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '• ${formatDateTime(f.at)} – ${f.by.name}: ${f.reason}',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               _ItemsCard(
                 order: order,
                 canEdit: canEdit && !_busy,
@@ -124,13 +152,56 @@ class _OnlineOrderDetailScreenState extends State<OnlineOrderDetailScreen> {
                 ),
                 const SizedBox(height: 10),
               ],
-              if (order.status == OrderStatus.ready)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10),
-                  child: Text('Đơn đã pha xong, chờ shipper nhận đơn.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.warning)),
+              if (order.status == OrderStatus.ready) ...[
+                Row(
+                  children: [
+                    if (order.delivery?.shipper == null &&
+                        order.dispatch?.state != DispatchState.offering) ...[
+                      Expanded(
+                        child: MeowSecondaryButton(
+                          label: 'Mời lại',
+                          icon: Icons.refresh_rounded,
+                          onPressed: _busy
+                              ? null
+                              : () => _run(() => OnlineOrderActions.retry(context, order)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: MeowSecondaryButton(
+                        label: order.delivery?.shipper == null ? 'Gán shipper' : 'Đổi shipper',
+                        icon: Icons.swap_horiz_rounded,
+                        onPressed: _busy
+                            ? null
+                            : () => _run(() => OnlineOrderActions.assign(context, order)),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 10),
+              ],
+              if (order.status == OrderStatus.deliveryFailed) ...[
+                MeowPrimaryButton(
+                  label: 'Giao lại',
+                  icon: Icons.replay_rounded,
+                  isLoading: _busy,
+                  onPressed: _busy
+                      ? null
+                      : () => _run(() => OnlineOrderActions.redeliver(context, order)),
+                ),
+                const SizedBox(height: 10),
+                MeowSecondaryButton(
+                  label: 'Hủy đơn (không hoàn tiền)',
+                  icon: Icons.cancel_outlined,
+                  textColor: AppColors.danger,
+                  backgroundColor: AppColors.dangerSoft,
+                  borderColor: const Color(0xFFFECDD3),
+                  onPressed: _busy
+                      ? null
+                      : () => _run(() => OnlineOrderActions.cancelFailed(context, order)),
+                ),
+              ],
               if (canCancel)
                 MeowSecondaryButton(
                   label: order.status == OrderStatus.pending ? 'Từ chối đơn' : 'Hủy đơn',
@@ -298,6 +369,7 @@ class _ItemsCard extends StatelessWidget {
           _row('Tạm tính', formatMoney(order.subtotal)),
           _row('Phí giao hàng',
               order.deliveryFee == 0 ? 'Miễn phí' : formatMoney(order.deliveryFee)),
+          for (final f in order.extraFees) _row(f.label, formatMoney(f.amount)),
           _row('Tổng cộng', formatMoney(order.total), bold: true),
           const SizedBox(height: 4),
           Text(
