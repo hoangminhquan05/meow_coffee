@@ -52,6 +52,7 @@ dependencies:
   geolocator: ^14.1.2
   flutter_ringtone_player: ^4.0.0+4
   url_launcher: ^6.3.3
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
@@ -79,6 +80,8 @@ flutter:
     - assets/images/
     # Tỉnh/Thành → Phường/Xã theo địa giới từ 1/7/2025 (nguồn: provinces.open-api.vn v2)
     - assets/data/
+    # Âm báo cho bản web (Android/iOS dùng chuông hệ thống)
+    - assets/sounds/
     - .env
 
   # To add assets to your application, add an assets section, like this:

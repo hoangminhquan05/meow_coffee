@@ -1,20 +1,14 @@
-import 'dart:io';
-
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/order.dart';
 import '../models/shop_settings.dart';
+import '../utils/file_download.dart';
 import '../utils/formatters.dart';
 
 /// Xuất hóa đơn PDF từ một đơn đã lưu (L7). Font mặc định của gói pdf
 /// không có dấu tiếng Việt nên chữ được bỏ dấu.
 class InvoicePdfService {
-  static const _downloadsChannel =
-      MethodChannel('com.example.meow_coffee/downloads');
-
   /// Bỏ dấu tiếng Việt nhưng giữ chữ hoa/thường.
   static String _t(String s) {
     final lower = normalizeVietnamese(s);
@@ -28,7 +22,9 @@ class InvoicePdfService {
     return buf.toString();
   }
 
-  static Future<File> generateAndSave(Order order, ShopSettings shop) async {
+  /// Tạo PDF rồi lưu (web: trình duyệt tải về; Android: Downloads).
+  /// Trả về chỗ đã lưu để báo cho người dùng.
+  static Future<String> generateAndSave(Order order, ShopSettings shop) async {
     final pdf = pw.Document();
     final bold = pw.TextStyle(fontWeight: pw.FontWeight.bold);
 
@@ -138,27 +134,10 @@ class InvoicePdfService {
       ),
     );
 
-    final fileName = 'HOADON_${order.orderCode}.pdf';
-    final bytes = await pdf.save();
-
-    if (Platform.isAndroid) {
-      final savedPath = await _downloadsChannel.invokeMethod<String>(
-        'saveToDownloads',
-        {
-          'fileName': fileName,
-          'mimeType': 'application/pdf',
-          'bytes': bytes,
-        },
-      );
-      if (savedPath != null && savedPath.isNotEmpty) {
-        return File(savedPath);
-      }
-    }
-
-    final dir = await getDownloadsDirectory() ??
-        await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/$fileName');
-    await file.writeAsBytes(bytes);
-    return file;
+    return saveDownload(
+      await pdf.save(),
+      fileName: 'HOADON_${order.orderCode}.pdf',
+      mimeType: 'application/pdf',
+    );
   }
 }

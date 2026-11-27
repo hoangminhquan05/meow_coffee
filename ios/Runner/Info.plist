@@ -68,5 +68,21 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Meow Coffee dùng vị trí để ghim địa chỉ quán/địa chỉ giao hàng và hiển thị vị trí shipper.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Meow Coffee cần truy cập thư viện ảnh để chọn ảnh đại diện, ảnh món và gửi ảnh trong tin nhắn.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Meow Coffee cần dùng camera để chụp ảnh gửi trong tin nhắn và cập nhật ảnh đại diện.</string>
+	<!-- OTP SĐT (Firebase Auth): Firebase quay lại app qua scheme này sau bước reCAPTCHA. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-997244478513-ios-ad190382ae026d0bbc2110</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

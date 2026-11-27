@@ -2,30 +2,53 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
-/// Chuông + rung báo đơn mới / lời mời giao đơn. flutter_ringtone_player chỉ
-/// có trên Android/iOS – chạy web/Windows (thử nhiều tài khoản cùng lúc) thì
-/// bỏ qua thay vì báo lỗi.
+import 'web_sound.dart';
+
+/// Chuông + rung báo đơn mới / lời mời giao đơn / tin nhắn mới.
+/// - Android/iOS: chuông hệ thống (flutter_ringtone_player).
+/// - Web: file trong assets/sounds/ (trình duyệt chỉ cho phát tiếng sau khi
+///   người dùng đã bấm vào trang ít nhất một lần). Rung chạy trên Chrome Android.
+/// - Windows/macOS/Linux: bỏ qua thay vì báo lỗi.
 class AlertSound {
   AlertSound._();
 
-  static bool get _supported =>
+  static const _notifyAsset = 'assets/sounds/notify.wav';
+  static const _ringAsset = 'assets/sounds/ring.wav';
+
+  static bool get _mobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
   static void _safe(Future<void> Function() call) {
-    if (!_supported) return;
+    if (!_mobile) return;
     call().catchError((Object e) => debugPrint('AlertSound: $e'));
   }
 
-  /// Một tiếng thông báo (đơn mới cho NV).
+  /// Một tiếng thông báo (đơn mới cho NV, tin nhắn mới).
   static void notify() {
-    _safe(() => FlutterRingtonePlayer().playNotification());
+    if (kIsWeb) {
+      webPlayOnce(_notifyAsset);
+    } else {
+      _safe(() => FlutterRingtonePlayer().playNotification());
+    }
     HapticFeedback.vibrate();
   }
 
   /// Chuông lặp cho tới khi gọi [stop] (lời mời shipper).
-  static void ringLoop() => _safe(() => FlutterRingtonePlayer().playRingtone(looping: true));
+  static void ringLoop() {
+    if (kIsWeb) {
+      webStartLoop(_ringAsset);
+    } else {
+      _safe(() => FlutterRingtonePlayer().playRingtone(looping: true));
+    }
+  }
 
-  static void stop() => _safe(() => FlutterRingtonePlayer().stop());
+  static void stop() {
+    if (kIsWeb) {
+      webStopLoop();
+    } else {
+      _safe(() => FlutterRingtonePlayer().stop());
+    }
+  }
 }

@@ -522,13 +522,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
 /// Xuất PDF và báo kết quả.
 Future<void> exportInvoicePdf(BuildContext context, Order order) async {
   try {
-    final file = await InvoicePdfService.generateAndSave(
+    final savedTo = await InvoicePdfService.generateAndSave(
       order,
       context.read<ShopSettingsProvider>().settings,
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Đã xuất hóa đơn: ${file.path}')),
+      SnackBar(content: Text('Đã xuất hóa đơn: $savedTo')),
     );
   } catch (e) {
     if (!context.mounted) return;
